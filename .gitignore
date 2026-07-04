@@ -1,0 +1,30 @@
+# Visual Studio / .NET
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Visual Studio working folder
+.vs/
+
+## Build results
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rchive/
+[Aa]rtifacts/
+TestResults/
+
+## NuGet
+*.nupkg
+*.snupkg
+
+## Tooling
+.idea/
+*.DotSettings.user

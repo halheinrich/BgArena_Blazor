@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <!-- BgTournament.Api is the admin HTTP contract (zero-dep shapes) — the
+         app's entire JSON vocabulary. The server itself is reached over HTTP
+         only; BgTournament.Server/.Protocol/.Core are never referenced here. -->
+    <ProjectReference Include="..\..\BgTournament\BgTournament.Api\BgTournament.Api.csproj" />
+    <!-- BgDiag_Razor supplies the view-only BackgammonDiagram component; the
+         explicit BackgammonDiagram_Lib / BgDataTypes_Lib references document
+         the directly consumed surfaces (DiagramRequest/DiagramOptions,
+         CubeOwner) per house pattern. -->
+    <ProjectReference Include="..\..\BgDiag_Razor\BgDiag_Razor\BgDiag_Razor.csproj" />
+    <ProjectReference Include="..\..\BackgammonDiagram_Lib\BackgammonDiagram_Lib\BackgammonDiagram_Lib.csproj" />
+    <ProjectReference Include="..\..\BgDataTypes_Lib\BgDataTypes_Lib\BgDataTypes_Lib.csproj" />
+  </ItemGroup>
+
+</Project>

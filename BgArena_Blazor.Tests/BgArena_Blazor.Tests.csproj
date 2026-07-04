@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- Tests keep warnings-as-errors (Directory.Build.props) but do not
+         generate a doc file; test classes carry XML docs voluntarily, matching
+         BgTournament.Tests. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="bunit" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BgArena_Blazor\BgArena_Blazor.csproj" />
+    <!-- Test-only references (precedent: BgTournament.Tests → BgInference).
+         The gating smoke boots the real tournament server in-proc
+         (Mvc.Testing) and connects reference bots through EngineClient; the
+         app itself never references either — its API is HTTP. -->
+    <ProjectReference Include="..\..\BgTournament\BgTournament.Server\BgTournament.Server.csproj" />
+    <ProjectReference Include="..\..\BgTournament\BgTournament.EngineClient\BgTournament.EngineClient.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

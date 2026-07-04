@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="../BgDiag_Razor/BgDiag_Razor/BgDiag_Razor.csproj" />
+  <Project Path="../BgTournament/BgTournament.Api/BgTournament.Api.csproj" />
+  <Project Path="BgArena_Blazor.Tests/BgArena_Blazor.Tests.csproj" />
+  <Project Path="BgArena_Blazor/BgArena_Blazor.csproj" />
+</Solution>
