@@ -23,7 +23,10 @@
          The gating smoke boots the real tournament server in-proc
          (Mvc.Testing) and connects reference bots through EngineClient; the
          app itself never references either — its API is HTTP. -->
-    <ProjectReference Include="..\..\BgTournament\BgTournament.Server\BgTournament.Server.csproj" />
+    <!-- Aliased: both the app and the server compile a top-level-statements
+         Program; the alias names which one the smoke's
+         WebApplicationFactory<Program> boots. -->
+    <ProjectReference Include="..\..\BgTournament\BgTournament.Server\BgTournament.Server.csproj" Aliases="TournamentServer" />
     <ProjectReference Include="..\..\BgTournament\BgTournament.EngineClient\BgTournament.EngineClient.csproj" />
   </ItemGroup>
 
