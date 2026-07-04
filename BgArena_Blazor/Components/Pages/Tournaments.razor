@@ -1,0 +1,109 @@
+@page "/tournaments"
+@inherits PollingComponentBase
+
+<PageTitle>Tournaments — BgArena</PageTitle>
+
+<h1>Tournaments</h1>
+
+@if (IsUnreachable)
+{
+    <ConnectionBanner />
+}
+
+<section class="panel">
+    <h2>Create a tournament</h2>
+    <div class="form-row">
+        <label>
+            Add participant
+            <select id="participant-pick" @bind="SelectedEngine">
+                <option value="">— pick —</option>
+                @foreach (var engine in AvailableEngines)
+                {
+                    <option value="@engine.Name" disabled="@engine.InMatch">
+                        @engine.Name@(engine.InMatch ? " (busy)" : "")
+                    </option>
+                }
+            </select>
+        </label>
+        <button id="add-participant" @onclick="AddParticipant" disabled="@(SelectedEngine.Length == 0)">Add</button>
+    </div>
+
+    @if (Participants.Count > 0)
+    {
+        <ol id="participant-list" class="participant-list">
+            @for (int i = 0; i < Participants.Count; i++)
+            {
+                int index = i;
+                <li>
+                    <span>@Participants[index]</span>
+                    <button class="icon" title="Move up" @onclick="() => MoveUp(index)" disabled="@(index == 0)">↑</button>
+                    <button class="icon" title="Move down" @onclick="() => MoveDown(index)" disabled="@(index == Participants.Count - 1)">↓</button>
+                    <button class="icon" title="Remove" @onclick="() => RemoveParticipant(index)">✕</button>
+                </li>
+            }
+        </ol>
+        <p class="muted">Order is seeding order — the final tie-break in the standings.</p>
+    }
+
+    <div class="form-row">
+        <label>
+            Match length
+            <input id="tournament-length" type="number" min="1" @bind="Form.MatchLength" />
+        </label>
+        <label>
+            Matches per pairing
+            <input id="matches-per-pairing" type="number" min="1" @bind="Form.MatchesPerPairing" />
+        </label>
+        <label>
+            Seed
+            <input id="tournament-seed" type="number" @bind="Form.Seed" />
+        </label>
+        <button id="create-button" class="primary" @onclick="CreateAsync" disabled="@(Participants.Count < 2)">Create</button>
+    </div>
+    <p class="muted">
+        An even matches-per-pairing balances the opening-roll seat exactly. An
+        omitted seed is server-chosen and recorded, so any tournament can be re-run.
+    </p>
+    @if (CreateError is not null)
+    {
+        <div id="create-error" class="banner banner-error" role="alert">@CreateError</div>
+    }
+</section>
+
+<h2>All tournaments</h2>
+@if (TournamentRows is null)
+{
+    <p class="muted">Loading…</p>
+}
+else if (TournamentRows.Count == 0)
+{
+    <p class="muted">No tournaments yet.</p>
+}
+else
+{
+    <table class="data-table tournaments-table">
+        <thead>
+            <tr>
+                <th>Tournament</th>
+                <th>Participants</th>
+                <th>Length</th>
+                <th>Per pairing</th>
+                <th>Status</th>
+                <th>Winner</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tournament in TournamentRows)
+            {
+                <tr>
+                    <td><a href="@($"tournaments/{tournament.TournamentId}")">@tournament.TournamentId</a></td>
+                    <td>@string.Join(", ", tournament.Participants)</td>
+                    <td>@tournament.MatchLength points</td>
+                    <td>@tournament.MatchesPerPairing</td>
+                    <td><span class="@ArenaDisplay.StatusCss(tournament.Status)">@tournament.Status</span></td>
+                    <td>@(tournament.Winner ?? "—")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

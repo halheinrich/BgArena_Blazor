@@ -1,0 +1,41 @@
+<table class="data-table ledger-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Pairing</th>
+            <th>Status</th>
+            <th>Winner</th>
+            <th>Match</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var entry in Entries)
+        {
+            <tr>
+                <td>@(entry.Index + 1)</td>
+                <td>@entry.SeatOne vs @entry.SeatTwo</td>
+                <td>
+                    @if (entry.Status is { } status)
+                    {
+                        <span class="@ArenaDisplay.StatusCss(status)">@status</span>
+                    }
+                    else
+                    {
+                        <span class="muted">scheduled</span>
+                    }
+                </td>
+                <td>@(entry.Winner ?? "—")</td>
+                <td>
+                    @if (entry.MatchId is { } matchId)
+                    {
+                        <a href="@($"matches/{matchId}")">@matchId</a>
+                    }
+                    else
+                    {
+                        <span class="muted">—</span>
+                    }
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>

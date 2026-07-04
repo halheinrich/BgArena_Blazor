@@ -1,0 +1,32 @@
+@if (Matches.Count == 0)
+{
+    <p class="muted">No matches yet.</p>
+}
+else
+{
+    <table class="data-table matches-table">
+        <thead>
+            <tr>
+                <th>Match</th>
+                <th>Engines</th>
+                <th>Length</th>
+                <th>Status</th>
+                <th>Winner</th>
+                <th>Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var match in Matches)
+            {
+                <tr>
+                    <td><a href="@($"matches/{match.MatchId}")">@match.MatchId</a></td>
+                    <td>@match.EngineOne vs @match.EngineTwo</td>
+                    <td>@ArenaDisplay.LengthText(match.MatchLength, match.MaxGames)</td>
+                    <td><span class="@ArenaDisplay.StatusCss(match.Status)">@match.Status</span></td>
+                    <td>@(match.Winner ?? "—")</td>
+                    <td>@ArenaDisplay.ScoreText(match)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

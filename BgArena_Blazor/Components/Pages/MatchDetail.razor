@@ -1,0 +1,62 @@
+@page "/matches/{MatchId}"
+@inherits PollingComponentBase
+
+<PageTitle>Match @MatchId — BgArena</PageTitle>
+
+@if (IsUnreachable)
+{
+    <ConnectionBanner />
+}
+
+@if (NotFound)
+{
+    <h1>Match</h1>
+    <div class="banner banner-error" role="alert">No match with id '@MatchId'.</div>
+    <p><a href="matches">Back to matches</a></p>
+}
+else if (Match is null)
+{
+    <h1>Match</h1>
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <h1>@Match.EngineOne vs @Match.EngineTwo</h1>
+
+    <dl class="detail-card">
+        <dt>Match id</dt>
+        <dd>@Match.MatchId</dd>
+        <dt>Length</dt>
+        <dd>@ArenaDisplay.LengthText(Match.MatchLength, Match.MaxGames)</dd>
+        <dt>Status</dt>
+        <dd><span class="@ArenaDisplay.StatusCss(Match.Status)">@Match.Status</span></dd>
+        <dt>Winner</dt>
+        <dd>@(Match.Winner ?? "—")</dd>
+        <dt>Score</dt>
+        <dd>@ArenaDisplay.ScoreText(Match)</dd>
+        <dt>Seed</dt>
+        <dd>@Match.Seed</dd>
+        @if (Match.MaxGames is { } maxGames && Match.MatchLength != 0)
+        {
+            <dt>Games cap</dt>
+            <dd>@maxGames</dd>
+        }
+        @if (Match.ForfeitedBy is { } forfeitedBy)
+        {
+            <dt>Forfeited by</dt>
+            <dd>@forfeitedBy</dd>
+        }
+        @if (Match.Detail is { } detail)
+        {
+            <dt>Detail</dt>
+            <dd>@detail</dd>
+        }
+    </dl>
+
+    @if (Match.Status == MatchStatus.Completed)
+    {
+        <a id="replay-link" class="button" href="@($"matches/{Match.MatchId}/replay")">View replay</a>
+    }
+
+    <p><a href="matches">Back to matches</a></p>
+}

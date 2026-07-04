@@ -1,0 +1,23 @@
+<table class="data-table standings-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Participant</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>S-B</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var row in Standings)
+        {
+            <tr>
+                <td>@row.Rank</td>
+                <td>@row.Participant</td>
+                <td>@row.Wins</td>
+                <td>@row.Losses</td>
+                <td>@row.SonnebornBerger</td>
+            </tr>
+        }
+    </tbody>
+</table>

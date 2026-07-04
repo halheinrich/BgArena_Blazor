@@ -1,0 +1,53 @@
+@page "/"
+@inherits PollingComponentBase
+
+<PageTitle>Engines — BgArena</PageTitle>
+
+<h1>Engines</h1>
+
+@if (IsUnreachable)
+{
+    <ConnectionBanner />
+}
+
+@if (EngineRows is null)
+{
+    <p class="muted">Loading…</p>
+}
+else if (EngineRows.Count == 0)
+{
+    <p class="muted">No engines connected. Point an engine at the server's <code>/engine</code> WebSocket endpoint.</p>
+}
+else
+{
+    <table class="data-table engines-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Version</th>
+                <th>Author</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var engine in EngineRows)
+            {
+                <tr>
+                    <td>@engine.Name</td>
+                    <td>@(engine.Version ?? "—")</td>
+                    <td>@(engine.Author ?? "—")</td>
+                    <td>
+                        @if (engine.InMatch)
+                        {
+                            <span class="status status-running">in match</span>
+                        }
+                        else
+                        {
+                            <span class="status status-idle">idle</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

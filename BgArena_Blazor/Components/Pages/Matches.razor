@@ -1,0 +1,72 @@
+@page "/matches"
+@inherits PollingComponentBase
+
+<PageTitle>Matches — BgArena</PageTitle>
+
+<h1>Matches</h1>
+
+@if (IsUnreachable)
+{
+    <ConnectionBanner />
+}
+
+<section class="panel">
+    <h2>Launch a match</h2>
+    <div class="form-row">
+        <label>
+            Engine one
+            <select id="engine-one" @bind="Form.EngineOne">
+                <option value="">— pick —</option>
+                @foreach (var engine in EngineRows ?? [])
+                {
+                    <option value="@engine.Name" disabled="@engine.InMatch">
+                        @engine.Name@(engine.InMatch ? " (busy)" : "")
+                    </option>
+                }
+            </select>
+        </label>
+        <label>
+            Engine two
+            <select id="engine-two" @bind="Form.EngineTwo">
+                <option value="">— pick —</option>
+                @foreach (var engine in EngineRows ?? [])
+                {
+                    <option value="@engine.Name" disabled="@engine.InMatch">
+                        @engine.Name@(engine.InMatch ? " (busy)" : "")
+                    </option>
+                }
+            </select>
+        </label>
+        <label>
+            Match length
+            <input id="match-length" type="number" min="0" @bind="Form.MatchLength" />
+        </label>
+        <label>
+            Max games
+            <input id="max-games" type="number" min="1" @bind="Form.MaxGames" />
+        </label>
+        <label>
+            Seed
+            <input id="match-seed" type="number" @bind="Form.Seed" />
+        </label>
+        <button id="launch-button" class="primary" @onclick="LaunchAsync" disabled="@(!CanLaunch)">Launch</button>
+    </div>
+    <p class="muted">
+        Match length 0 starts a money session (max games required). Seed and max
+        games are optional otherwise; an omitted seed is server-chosen and recorded.
+    </p>
+    @if (LaunchError is not null)
+    {
+        <div id="launch-error" class="banner banner-error" role="alert">@LaunchError</div>
+    }
+</section>
+
+<h2>All matches</h2>
+@if (MatchRows is null)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <MatchesTable Matches="MatchRows" />
+}

@@ -1,0 +1,51 @@
+@page "/tournaments/{TournamentId}"
+@inherits PollingComponentBase
+
+<PageTitle>Tournament @TournamentId — BgArena</PageTitle>
+
+@if (IsUnreachable)
+{
+    <ConnectionBanner />
+}
+
+@if (NotFound)
+{
+    <h1>Tournament</h1>
+    <div class="banner banner-error" role="alert">No tournament with id '@TournamentId'.</div>
+    <p><a href="tournaments">Back to tournaments</a></p>
+}
+else if (Tournament is null)
+{
+    <h1>Tournament</h1>
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <h1>Tournament @Tournament.TournamentId</h1>
+
+    <dl class="detail-card">
+        <dt>Participants</dt>
+        <dd>@string.Join(", ", Tournament.Participants)</dd>
+        <dt>Format</dt>
+        <dd>@Tournament.MatchLength points · each pairing @Tournament.MatchesPerPairing×</dd>
+        <dt>Status</dt>
+        <dd><span class="@ArenaDisplay.StatusCss(Tournament.Status)">@Tournament.Status</span></dd>
+        <dt>Winner</dt>
+        <dd>@(Tournament.Winner ?? "—")</dd>
+        <dt>Seed</dt>
+        <dd>@Tournament.Seed</dd>
+        @if (Tournament.Detail is { } detail)
+        {
+            <dt>Detail</dt>
+            <dd>@detail</dd>
+        }
+    </dl>
+
+    <h2>Standings</h2>
+    <StandingsTable Standings="Tournament.Standings" />
+
+    <h2>Schedule</h2>
+    <TournamentLedger Entries="Tournament.Matches" />
+
+    <p><a href="tournaments">Back to tournaments</a></p>
+}
