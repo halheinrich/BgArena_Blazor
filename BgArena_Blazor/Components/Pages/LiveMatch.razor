@@ -1,0 +1,78 @@
+@page "/matches/{MatchId}/live"
+
+<PageTitle>Live @MatchId — BgArena</PageTitle>
+
+@if (IsUnreachable)
+{
+    <ConnectionBanner />
+}
+
+@if (NotFound)
+{
+    <h1>Live match</h1>
+    <div class="banner banner-error" role="alert">No match with id '@MatchId'.</div>
+    <p><a href="matches">Back to matches</a></p>
+}
+else if (Summary is null)
+{
+    <h1>Live match</h1>
+    <p class="muted">Connecting…</p>
+}
+else
+{
+    <h1>@Summary.EngineOne vs @Summary.EngineTwo</h1>
+    <p class="muted">@ArenaDisplay.MatchKindText(Summary.MatchLength) · match @Summary.MatchId</p>
+
+    @if (Terminal is { } terminal)
+    {
+        <div id="live-terminal" class="live-terminal">
+            <p class="replay-caption">
+                Match over —
+                <span class="@ArenaDisplay.StatusCss(terminal.Status)">@terminal.Status</span>
+            </p>
+            <dl class="detail-card">
+                <dt>Winner</dt>
+                <dd>@(terminal.Winner ?? "—")</dd>
+                <dt>Score</dt>
+                <dd>@ArenaDisplay.ScoreText(terminal)</dd>
+                @if (terminal.ForfeitedBy is { } forfeitedBy)
+                {
+                    <dt>Forfeited by</dt>
+                    <dd>@forfeitedBy</dd>
+                }
+                @if (terminal.Detail is { } detail)
+                {
+                    <dt>Detail</dt>
+                    <dd>@detail</dd>
+                }
+            </dl>
+            <a id="live-replay-link" class="button" href="@($"matches/{Summary.MatchId}/replay")">View replay</a>
+        </div>
+    }
+    else
+    {
+        <p id="live-scoreboard" class="live-scoreboard">
+            <span class="live-game">Game @GameNumber</span>
+            <span class="live-score">@Summary.EngineOne @SeatOneScore – @SeatTwoScore @Summary.EngineTwo</span>
+        </p>
+
+        <p id="live-caption" class="replay-caption">@Caption</p>
+
+        @if (MappingError is { } mappingError)
+        {
+            <div id="live-mapping-error" class="banner banner-error" role="alert">
+                This position cannot be rendered: @mappingError
+            </div>
+        }
+        else if (CurrentRequest is { } request)
+        {
+            <ReplayBoard Request="request" />
+        }
+        else
+        {
+            <p id="live-placeholder" class="muted board-placeholder">Waiting for the board…</p>
+        }
+    }
+
+    <p><a href="@($"matches/{Summary.MatchId}")">Back to match</a></p>
+}

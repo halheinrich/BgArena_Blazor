@@ -13,7 +13,7 @@ namespace BgArena_Blazor.Tests;
 /// </summary>
 internal sealed class RoutedJsonHandler : HttpMessageHandler
 {
-    private readonly Dictionary<string, (HttpStatusCode Status, string Json)> _routes = [];
+    private readonly Dictionary<string, (HttpStatusCode Status, string Body, string ContentType)> _routes = [];
 
     /// <summary>The body of the most recent POST, for request-shape asserts.</summary>
     public string? LastPostBody { get; private set; }
@@ -21,10 +21,20 @@ internal sealed class RoutedJsonHandler : HttpMessageHandler
     /// <summary>When true every request throws <see cref="HttpRequestException"/>.</summary>
     public bool ThrowConnectionError { get; set; }
 
-    /// <summary>Maps a route key like <c>"GET /engines"</c> to a canned response.</summary>
+    /// <summary>Maps a route key like <c>"GET /engines"</c> to a canned JSON response.</summary>
     public RoutedJsonHandler Map(string methodAndPath, string json, HttpStatusCode status = HttpStatusCode.OK)
     {
-        _routes[methodAndPath] = (status, json);
+        _routes[methodAndPath] = (status, json, "application/json");
+        return this;
+    }
+
+    /// <summary>
+    /// Maps a route to a canned <c>text/event-stream</c> body — the live feed's
+    /// transport, so the page's SSE parse path runs against real framing.
+    /// </summary>
+    public RoutedJsonHandler MapEventStream(string methodAndPath, string sseBody)
+    {
+        _routes[methodAndPath] = (HttpStatusCode.OK, sseBody, "text/event-stream");
         return this;
     }
 
@@ -42,12 +52,12 @@ internal sealed class RoutedJsonHandler : HttpMessageHandler
             LastPostBody = await request.Content.ReadAsStringAsync(cancellationToken);
 
         string key = $"{request.Method} {request.RequestUri!.AbsolutePath}";
-        if (!_routes.TryGetValue(key, out (HttpStatusCode Status, string Json) route))
+        if (!_routes.TryGetValue(key, out (HttpStatusCode Status, string Body, string ContentType) route))
             throw new InvalidOperationException($"No stubbed route for '{key}'.");
 
         return new HttpResponseMessage(route.Status)
         {
-            Content = new StringContent(route.Json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(route.Body, Encoding.UTF8, route.ContentType),
         };
     }
 }

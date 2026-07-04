@@ -52,7 +52,7 @@ public partial class ReplayViewer
 
     /// <summary>The caption for the current step: who did what, or the game outcome.</summary>
     protected string Caption => Cursor < MaxCursor
-        ? EntryCaption(CurrentGame.Entries[Cursor])
+        ? ReplayNarration.Entry(DiagramContext.ForGame(Replay, CurrentGame), CurrentGame.Entries[Cursor])
         : FinalCaption(CurrentGame);
 
     private GameReplay CurrentGame => Replay.Games[_gameIndex];
@@ -117,34 +117,10 @@ public partial class ReplayViewer
         }
     }
 
-    private string EntryCaption(GameEntry entry) => entry switch
-    {
-        PlayEntry play =>
-            $"{EngineName(play.Actor)} rolls {play.Die1}-{play.Die2}: {MovesText(play.Moves)}",
-        CubeOfferEntry offer =>
-            $"{EngineName(offer.Actor)} doubles to {offer.State.CubeValue * 2}",
-        CubeResponseEntry { Action: CubeResponseAction.Take } response =>
-            $"{EngineName(response.Actor)} takes",
-        CubeResponseEntry response =>
-            $"{EngineName(response.Actor)} passes",
-        _ => throw new InvalidOperationException($"Unknown replay entry kind '{entry.GetType().Name}'."),
-    };
-
     private string FinalCaption(GameReplay game) =>
         $"Game {game.GameNumber} over — {EngineName(game.Winner)} wins {game.Points} "
         + (game.Points == 1 ? "point" : "points")
         + $" ({game.ResultKind.ToString().ToLowerInvariant()})";
 
     private string EngineName(Seat seat) => seat == Seat.One ? Replay.EngineOne : Replay.EngineTwo;
-
-    /// <summary>
-    /// Moves stay in the actor's own numbering, printed verbatim — never
-    /// interpreted. The contract's two sentinels get their standard notation
-    /// names: from 25 enters off the actor's bar, to 0 bears the checker off.
-    /// </summary>
-    private static string MovesText(IReadOnlyList<PlayMove> moves) =>
-        moves.Count == 0
-            ? "no play"
-            : string.Join(" ", moves.Select(move =>
-                $"{(move.From == 25 ? "bar" : move.From.ToString())}/{(move.To == 0 ? "off" : move.To.ToString())}"));
 }

@@ -263,3 +263,26 @@ a.button {
 .replay-board {
     max-width: 40rem;
 }
+
+/* Live spectating */
+
+.live-scoreboard {
+    display: flex;
+    gap: 1rem;
+    align-items: baseline;
+    font-weight: 600;
+}
+
+.live-scoreboard .live-game {
+    color: var(--muted);
+}
+
+.board-placeholder {
+    max-width: 40rem;
+    padding: 2rem 0;
+    text-align: center;
+}
+
+.live-terminal {
+    margin: 1rem 0;
+}
