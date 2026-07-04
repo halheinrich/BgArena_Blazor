@@ -105,8 +105,7 @@ public class ArenaClientTests
     {
         // The producer's whole-replay golden pin, verbatim: all three entry
         // kinds under their "type" discriminators.
-        var handler = new StubHandler(_ => Json(HttpStatusCode.OK,
-            """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"games":[{"gameNumber":1,"winner":"seatTwo","resultKind":"single","cubeValue":2,"points":2,"seatOneScore":0,"seatTwoScore":0,"isCrawford":false,"entries":[{"type":"play","die1":3,"die2":1,"moves":[{"from":8,"to":5},{"from":6,"to":5}],"actor":"seatOne","state":{"board":[0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0],"cubeValue":1,"cubeOwner":"centered"}},{"type":"cubeOffer","actor":"seatTwo","state":{"board":[0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0],"cubeValue":1,"cubeOwner":"centered"}},{"type":"cubeResponse","action":"take","actor":"seatOne","state":{"board":[0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0],"cubeValue":1,"cubeOwner":"centered"}}],"finalState":{"board":[0,-2,0,0,0,0,5,0,3,0,0,0,-5,5,0,0,0,-3,0,-5,0,0,0,0,2,0],"cubeValue":2,"cubeOwner":"seatOne"}}]}"""));
+        var handler = new StubHandler(_ => Json(HttpStatusCode.OK, CannedJson.GoldenReplay));
 
         ArenaResult<MatchGamesResponse> result = await Client(handler).GetMatchGamesAsync("match-1");
 

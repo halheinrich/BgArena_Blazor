@@ -1,0 +1,41 @@
+@if (Replay.Games.Count == 0)
+{
+    <p class="muted">This match has no recorded games.</p>
+}
+else
+{
+    <div class="replay-viewer">
+        <div class="form-row">
+            <label>
+                Game
+                <select id="game-pick" @bind="GameIndex">
+                    @for (int i = 0; i < Replay.Games.Count; i++)
+                    {
+                        int index = i;
+                        <option value="@index">@GameLabel(Replay.Games[index])</option>
+                    }
+                </select>
+            </label>
+            <div class="stepper">
+                <button id="step-start" class="icon" title="First position" @onclick="JumpToStart" disabled="@(Cursor == 0)">⏮</button>
+                <button id="step-prev" class="icon" title="Previous position" @onclick="StepBack" disabled="@(Cursor == 0)">◀</button>
+                <span id="step-indicator" class="muted">step @(Cursor + 1) of @(MaxCursor + 1)</span>
+                <button id="step-next" class="icon" title="Next position" @onclick="StepForward" disabled="@(Cursor == MaxCursor)">▶</button>
+                <button id="step-end" class="icon" title="Final position" @onclick="JumpToEnd" disabled="@(Cursor == MaxCursor)">⏭</button>
+            </div>
+        </div>
+
+        <p id="step-caption" class="replay-caption">@Caption</p>
+
+        @if (MappingError is { } mappingError)
+        {
+            <div id="mapping-error" class="banner banner-error" role="alert">
+                This position cannot be rendered: @mappingError
+            </div>
+        }
+        else if (CurrentRequest is { } request)
+        {
+            <ReplayBoard Request="request" />
+        }
+    </div>
+}

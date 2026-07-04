@@ -1,0 +1,42 @@
+@page "/matches/{MatchId}/replay"
+
+<PageTitle>Replay @MatchId — BgArena</PageTitle>
+
+@if (NotFound)
+{
+    <h1>Replay</h1>
+    <div class="banner banner-error" role="alert">No match with id '@MatchId'.</div>
+    <p><a href="matches">Back to matches</a></p>
+}
+else if (RefusalReason is { } reason)
+{
+    <h1>Replay</h1>
+    <div id="replay-refused" class="banner banner-error" role="alert">@reason</div>
+    <p>
+        <a href="@($"matches/{MatchId}")">Back to match</a>
+        <button id="retry-replay" @onclick="LoadAsync">Retry</button>
+    </p>
+}
+else if (Unreachable)
+{
+    <h1>Replay</h1>
+    <div class="banner banner-error" role="alert">Tournament server unreachable.</div>
+    <p>
+        <a href="@($"matches/{MatchId}")">Back to match</a>
+        <button id="retry-replay" @onclick="LoadAsync">Retry</button>
+    </p>
+}
+else if (Replay is null)
+{
+    <h1>Replay</h1>
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <h1>@Replay.EngineOne vs @Replay.EngineTwo</h1>
+    <p class="muted">@ArenaDisplay.MatchKindText(Replay.MatchLength) · match @Replay.MatchId</p>
+
+    <ReplayViewer Replay="Replay" />
+
+    <p><a href="@($"matches/{MatchId}")">Back to match</a></p>
+}

@@ -28,4 +28,11 @@ internal static class ArenaDisplay
     /// <summary>The final score line, or an em-dash while there is none.</summary>
     public static string ScoreText(MatchSummary match) =>
         match is { SeatOneScore: int one, SeatTwoScore: int two } ? $"{one}–{two}" : "—";
+
+    /// <summary>
+    /// The kind of contest, for surfaces that don't carry a games cap (the
+    /// replay envelope): match play by its length, or a money session.
+    /// </summary>
+    public static string MatchKindText(int matchLength) =>
+        matchLength == 0 ? "money session" : $"{matchLength}-point match";
 }
