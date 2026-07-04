@@ -33,6 +33,26 @@ public class MatchReplayPageTests : BunitContext
     }
 
     [Fact]
+    public void TerminalNonCompleted_RendersThePartialityNoteAboveTheViewer()
+    {
+        // A forfeited match now serves the games that finished before the break;
+        // the page signals the partiality from the response's status, not by
+        // re-deriving it.
+        const string forfeitedReplay =
+            """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":5,"status":"forfeited","games":[]}""";
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1/games", forfeitedReplay));
+
+        var cut = Render<MatchReplay>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            string note = cut.Find("#replay-partial").TextContent;
+            Assert.Contains("Forfeited", note);
+            Assert.Contains("0 completed games", note);
+        });
+    }
+
+    [Fact]
     public void KnownButNotCompleted_RendersTheServersReasonWithRetry()
     {
         UseHandler(new RoutedJsonHandler().Map(

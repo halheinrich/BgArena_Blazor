@@ -36,6 +36,13 @@ else
     <h1>@Replay.EngineOne vs @Replay.EngineTwo</h1>
     <p class="muted">@ArenaDisplay.MatchKindText(Replay.MatchLength) · match @Replay.MatchId</p>
 
+    @if (Replay.Status != MatchStatus.Completed)
+    {
+        <div id="replay-partial" class="banner banner-warn" role="status">
+            @ArenaDisplay.PartialReplayText(Replay.Status, Replay.Games.Count)
+        </div>
+    }
+
     <ReplayViewer Replay="Replay" />
 
     <p><a href="@($"matches/{MatchId}")">Back to match</a></p>

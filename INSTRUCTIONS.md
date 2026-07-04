@@ -54,9 +54,10 @@ BgArena_Blazor/
 ├── appsettings.json                    Arena:BaseAddress (required)
 ├── Properties/launchSettings.json
 ├── Services/
-│   ├── ArenaClient.cs                  typed HTTP client — the eight admin endpoints
+│   ├── ArenaClient.cs                  typed HTTP client — admin endpoints + the live SSE subscription
 │   ├── ArenaResult.cs                  Ok | Refused(status, reason) envelope
-│   └── ReplayDiagramMapper.cs          GameEntry/GamePosition → DiagramRequest glue
+│   ├── DiagramContext.cs               source-agnostic board context (replay + live share it)
+│   └── ReplayDiagramMapper.cs          position → DiagramRequest glue, over DiagramContext
 ├── Components/
 │   ├── App.razor / Routes.razor / _Imports.razor
 │   ├── Layout/                         MainLayout + NavMenu (Engines · Matches · Tournaments)
@@ -64,7 +65,8 @@ BgArena_Blazor/
 │   │   ├── Engines.razor(.cs)          "/" — connected engines, polling
 │   │   ├── Matches.razor(.cs)          "/matches" — launch form + newest-first listing
 │   │   ├── MatchDetail.razor(.cs)      "/matches/{MatchId}" — record card; polls while Running
-│   │   ├── MatchReplay.razor(.cs)      "/matches/{MatchId}/replay" — load-once
+│   │   ├── MatchReplay.razor(.cs)      "/matches/{MatchId}/replay" — load-once (partial for non-completed)
+│   │   ├── LiveMatch.razor(.cs)        "/matches/{MatchId}/live" — follow-live board over the SSE feed
 │   │   ├── Tournaments.razor(.cs)      "/tournaments" — create form + listing
 │   │   └── TournamentDetail.razor(.cs) "/tournaments/{TournamentId}" — standings + ledger
 │   └── Shared/
@@ -74,6 +76,7 @@ BgArena_Blazor/
 │       ├── MatchesTable.razor(.cs)     the one MatchSummary row renderer
 │       ├── StandingsTable.razor(.cs)
 │       ├── TournamentLedger.razor(.cs)
+│       ├── ReplayNarration.cs          per-entry caption wording (replay + live SSOT)
 │       ├── ReplayViewer.razor(.cs)     game picker + entry stepper + captions + board
 │       └── ReplayBoard.razor(.cs)      the one sized container over BackgammonDiagram
 └── wwwroot/app.css
@@ -86,7 +89,8 @@ BgArena_Blazor.Tests/
 ├── SharedTableTests.cs                 bUnit: tables, links, money wording
 ├── PageTests.cs                        bUnit: dashboards, forms, refusals, banners
 ├── ReplayViewerTests.cs                bUnit: stepping, captions, undrawable-position path
-├── MatchReplayPageTests.cs             bUnit: page outcomes (golden / 409 / 404)
+├── MatchReplayPageTests.cs             bUnit: page outcomes (golden / partial / 409 / 404)
+├── LiveMatchPageTests.cs               bUnit: live page over an SSE stub (snapshot/entry/terminal/drop)
 └── ArenaSmokeTests.cs                  THE gating smoke — real server, real wire, no stubs
 ```
 
@@ -94,9 +98,9 @@ BgArena_Blazor.Tests/
 
 **What this is.** The tournament arena's admin console and spectator
 front-end: polling dashboards over BgTournament's admin HTTP API (engines,
-matches, tournaments — with launch/create forms) and step-through replay of
-completed matches rendered on `BackgammonDiagram`. v1 is deliberately
-poll-based with no live per-move view.
+matches, tournaments — with launch/create forms), step-through replay of
+terminal matches rendered on `BackgammonDiagram`, and a follow-live per-move
+view of a running match over the server's SSE feed.
 
 **One route to the server.** `ArenaClient` is the only thing that speaks
 HTTP: eight endpoints over one `IHttpClientFactory` typed client whose base
@@ -140,9 +144,37 @@ entries render checker-style carrying their dice; cube entries and
 `DiagramRequest.Builder` validates. Money sessions pass `MatchLength = 0`
 through (the diagram's own money sentinel) with the needs fields deliberately
 0 — the renderer never reads them on that path. Captions name the actor and
-action; moves print verbatim in the actor's own numbering, with the
-contract's two documented sentinels given their standard notation names
-(from 25 = "bar", to 0 = "off").
+action (`ReplayNarration`, shared with the live view); moves print verbatim
+in the actor's own numbering, with the contract's two documented sentinels
+given their standard notation names (from 25 = "bar", to 0 = "off").
+
+**One mapping, two sources (`DiagramContext`).** The mapper is driven by a
+source-agnostic context — engine names and match length (match-level), plus
+the entering scores and Crawford flag of the game in view (game-level). The
+settled replay builds it from `MatchGamesResponse` + `GameReplay`; the live
+feed builds it from `MatchSummary` + the snapshot / game-started event. Six
+identical facts either way, so the mapper (and the money-sentinel needs
+derivation inside it) stays single-sourced. Crawford is a **frame-free** fact
+the producer now carries on the live events, so it is rendered from the feed —
+never re-derived client-side (the Crawford-vs-post-Crawford rule needs match
+history the substrate owns).
+
+**Live spectating: follow the latest.** `LiveMatch` subscribes to the SSE
+feed and always renders the latest position (no stepping — replay owns that).
+It fetches the match summary once for the match-level context, then folds each
+event: the snapshot establishes the join-in-progress game (last entry, or a
+waiting placeholder), per-move entries render through the shared mapper, a
+game-started event shows a between-games placeholder (naming the Crawford
+game), and the terminal event shows the outcome and hands off to replay. It is
+push not poll, so it is a bespoke component rather than a
+`PollingComponentBase`, but it **mirrors that base's failure taxonomy**: a
+transport drop keeps the last board, raises the unreachable banner, and
+re-subscribes (the fresh snapshot re-establishes state — v1 has no
+`Last-Event-ID` resume), while a malformed event (`JsonException`) escalates
+into the circuit. `ArenaClient.SubscribeMatchLiveAsync` decides the documented
+404 at subscribe time and folds it into the `ArenaResult` envelope; the
+ordered stream lives inside `Ok`, and an inner iterator owns the response
+lifetime.
 
 **Fail visible at the render boundary.** The viewer maps inside a try/catch:
 a position the Builder refuses renders an explicit "cannot be rendered"
@@ -162,8 +194,14 @@ Smoke (gating): `ArenaSmokeTests` boots the real server in-proc, connects
 two reference engines over real WebSockets, drives a fixed-seed match to
 completion through `ArenaClient`, consumes the replay endpoint's real JSON,
 maps every entry and finalState of every game, and renders + steps
-`ReplayViewer` through the whole payload. The canned fixtures are
-convenience copies; **the smoke is where the contract is proven.**
+`ReplayViewer` through the whole payload. A second smoke subscribes to the
+real live feed: reference engines are gated shut (a `GatedPlayAgent` wrapping
+the seeded random bot) so the subscriber joins while the match is parked and
+catches the stream from the top; it asserts snapshot-first / terminal-last
+ordering, that the games finalized live are JSON-identical to the served
+replay, and that every live board renders through the page's mapping path. The
+canned fixtures are convenience copies; **the smoke is where the contract is
+proven.**
 
 ## Public API
 
@@ -173,9 +211,10 @@ Razor component model requires it). Its outward surface is the UI:
 
 ```
 /                                   connected engines (claimed/idle), polling
-/matches                            launch form + all matches, newest first
-/matches/{matchId}                  record card; polls while Running; replay link when Completed
-/matches/{matchId}/replay           step-through replay (load-once)
+/matches                            launch form + all matches, newest first (watch-live link on Running rows)
+/matches/{matchId}                  record card; polls while Running; watch-live when Running, else replay
+/matches/{matchId}/replay           step-through replay (load-once; partiality note for non-completed)
+/matches/{matchId}/live             follow-live per-move board over the SSE feed; hands off to replay when terminal
 /tournaments                        create form (ordered seeding pick) + all tournaments
 /tournaments/{tournamentId}         standings + schedule ledger (rows link to matches)
 ```
@@ -215,6 +254,13 @@ Configuration:
   retry (self-healing). A `JsonException` mid-poll is a producer contract
   break and must escalate (it dispatches into the circuit) — folding it into
   "unreachable" would hide a real break behind a soft banner.
+- **The live feed carries the same taxonomy — keep it so.** `LiveMatch` is
+  push, not poll, but a transport drop mid-stream self-heals (banner +
+  re-subscribe; the fresh snapshot re-establishes state — v1 has no
+  `Last-Event-ID` resume) while a malformed event stays a `JsonException` that
+  escalates. `SubscribeMatchLiveAsync` folds only the documented 404 into
+  `ArenaResult`; don't swallow a transport drop into that envelope, and don't
+  demote a parse failure to the banner.
 - **Razor markup namespaces come from `_Imports.razor`, not code-behind
   usings.** A component referenced only in markup (e.g. `BackgammonDiagram`)
   fails with RZ10012 unless its namespace is in `_Imports.razor` — the

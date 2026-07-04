@@ -26,12 +26,27 @@ public class SharedTableTests : BunitContext
             Match(id: "m-2", status: MatchStatus.Completed, winner: "Alpha", seatOneScore: 7, seatTwoScore: 3),
         ]));
 
-        var links = cut.FindAll("tbody a");
-        Assert.Equal(2, links.Count);
-        Assert.Equal("matches/m-1", links[0].GetAttribute("href"));
-        Assert.Equal("matches/m-2", links[1].GetAttribute("href"));
+        var rows = cut.FindAll("tbody tr");
+        Assert.Equal("matches/m-1", rows[0].QuerySelector("a")!.GetAttribute("href"));
+        Assert.Equal("matches/m-2", rows[1].QuerySelector("a")!.GetAttribute("href"));
         Assert.Contains("7–3", cut.Markup);
         Assert.Contains("Alpha vs Beta", cut.Markup);
+    }
+
+    [Fact]
+    public void MatchesTable_OffersWatchLiveOnRunningRowsOnly()
+    {
+        var cut = Render<MatchesTable>(p => p.Add(c => c.Matches,
+        [
+            Match(id: "m-run"),
+            Match(id: "m-done", status: MatchStatus.Completed, winner: "Alpha", seatOneScore: 7, seatTwoScore: 3),
+        ]));
+
+        var rows = cut.FindAll("tbody tr");
+        var watch = rows[0].QuerySelector("a.watch-live");
+        Assert.NotNull(watch);
+        Assert.Equal("matches/m-run/live", watch.GetAttribute("href"));
+        Assert.Null(rows[1].QuerySelector("a.watch-live"));
     }
 
     [Fact]

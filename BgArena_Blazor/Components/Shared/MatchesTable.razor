@@ -22,7 +22,13 @@ else
                     <td><a href="@($"matches/{match.MatchId}")">@match.MatchId</a></td>
                     <td>@match.EngineOne vs @match.EngineTwo</td>
                     <td>@ArenaDisplay.LengthText(match.MatchLength, match.MaxGames)</td>
-                    <td><span class="@ArenaDisplay.StatusCss(match.Status)">@match.Status</span></td>
+                    <td>
+                        <span class="@ArenaDisplay.StatusCss(match.Status)">@match.Status</span>
+                        @if (match.Status == MatchStatus.Running)
+                        {
+                            <a class="watch-live" href="@($"matches/{match.MatchId}/live")">watch</a>
+                        }
+                    </td>
                     <td>@(match.Winner ?? "—")</td>
                     <td>@ArenaDisplay.ScoreText(match)</td>
                 </tr>

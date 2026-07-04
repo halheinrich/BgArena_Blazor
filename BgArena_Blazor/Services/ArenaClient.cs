@@ -62,11 +62,14 @@ public sealed class ArenaClient
     }
 
     /// <summary>
-    /// Fetches a completed match's replay (<c>GET /matches/{matchId}/games</c>).
+    /// Fetches a match's replay (<c>GET /matches/{matchId}/games</c>). Served
+    /// for every terminal match — the full set when
+    /// <see cref="MatchStatus.Completed"/>, and the games that finished before
+    /// the break for a forfeited/aborted/faulted one (the response's
+    /// <see cref="MatchGamesResponse.Status"/> qualifies the partiality).
     /// Documented refusals: 404 (unknown id, no body); 409 with a reason (the
-    /// match is known but not <see cref="MatchStatus.Completed"/> — running
-    /// matches have no settled transcripts yet, forfeited/aborted/faulted
-    /// matches retain none).
+    /// match is still <see cref="MatchStatus.Running"/> — its games stream live
+    /// from <c>/matches/{matchId}/live</c> instead).
     /// </summary>
     public async Task<ArenaResult<MatchGamesResponse>> GetMatchGamesAsync(string matchId, CancellationToken cancellationToken = default)
     {

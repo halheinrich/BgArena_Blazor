@@ -35,4 +35,16 @@ internal static class ArenaDisplay
     /// </summary>
     public static string MatchKindText(int matchLength) =>
         matchLength == 0 ? "money session" : $"{matchLength}-point match";
+
+    /// <summary>
+    /// The note for a partial replay — a terminal match that did not complete
+    /// naturally (<paramref name="status"/> other than
+    /// <see cref="MatchStatus.Completed"/>) serves only the games that finished
+    /// before the break. The count is sourced from the served payload, not
+    /// re-derived.
+    /// </summary>
+    public static string PartialReplayText(MatchStatus status, int gameCount) =>
+        $"{status} — showing the {gameCount} completed "
+        + (gameCount == 1 ? "game" : "games")
+        + " that finished before the match ended.";
 }

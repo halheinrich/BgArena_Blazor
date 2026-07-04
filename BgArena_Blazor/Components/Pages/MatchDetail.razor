@@ -53,8 +53,15 @@ else
         }
     </dl>
 
-    @if (Match.Status == MatchStatus.Completed)
+    @if (Match.Status == MatchStatus.Running)
     {
+        <a id="watch-live-link" class="button" href="@($"matches/{Match.MatchId}/live")">Watch live</a>
+    }
+    else
+    {
+        @* Every terminal match has a replay: the full transcript when Completed,
+           the games that finished before the break otherwise (the page signals
+           the partiality). *@
         <a id="replay-link" class="button" href="@($"matches/{Match.MatchId}/replay")">View replay</a>
     }
 

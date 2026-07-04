@@ -2,6 +2,8 @@ extern alias TournamentServer;
 
 using System.Net;
 using System.Net.WebSockets;
+using System.Text.Json;
+using BackgammonDiagram_Lib;
 using BgArena_Blazor.Components.Shared;
 using BgArena_Blazor.Services;
 using BgTournament.Api;
@@ -28,6 +30,9 @@ public class ArenaSmokeTests : BunitContext
 {
     private static readonly TimeSpan CompletionDeadline = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan RegistrationDeadline = TimeSpan.FromSeconds(10);
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    private static string Json<T>(T value) => JsonSerializer.Serialize(value, WebJson);
 
     /// <summary>
     /// Connects a reference engine (random play, passive cube) the way any
@@ -144,6 +149,142 @@ public class ArenaSmokeTests : BunitContext
         }
     }
 
+    /// <summary>
+    /// Connects a reference engine whose play agent is gated shut, so the match
+    /// parks at its first play query until the gate is released. This makes the
+    /// live subscription deterministic: the subscriber joins while the match is
+    /// parked, so its snapshot arrives first and no increment is missed.
+    /// </summary>
+    private static async Task<GatedPlayAgent> ConnectGatedEngineAsync(
+        WebApplicationFactory<TournamentServer::Program> factory, string name, int seed)
+    {
+        var gate = new GatedPlayAgent(new RandomPlayAgent(seed));
+        WebSocket socket = await factory.Server.CreateWebSocketClient()
+            .ConnectAsync(new Uri("ws://localhost/engine"), CancellationToken.None);
+        var engine = new Engine(new EngineIdentity(name), gate, new PassiveCubeAgent());
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await engine.ServeAsync(socket);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or IOException)
+            {
+                // Test teardown: the server or socket ended the session.
+            }
+        });
+        return gate;
+    }
+
+    [Fact]
+    public async Task LivePath_WireMatch_SnapshotFirstTerminalLast_GamesAgreeWithReplay_AndBoardsRender()
+    {
+        using var factory = new WebApplicationFactory<TournamentServer::Program>();
+        var arena = new ArenaClient(factory.CreateClient());
+        using var deadline = new CancellationTokenSource(CompletionDeadline);
+
+        // Gated engines: parked until released, so the subscriber catches the
+        // whole feed from the top — the strongest form of the agreement check.
+        GatedPlayAgent alpha = await ConnectGatedEngineAsync(factory, "LiveAlpha", seed: 11);
+        GatedPlayAgent beta = await ConnectGatedEngineAsync(factory, "LiveBeta", seed: 22);
+        await WaitForEnginesAsync(arena, "LiveAlpha", "LiveBeta");
+
+        ArenaResult<MatchSummary> started = await arena.StartMatchAsync(
+            new StartMatchRequest("LiveAlpha", "LiveBeta", MatchLength: 3, Seed: 4242));
+        Assert.True(started.IsSuccess, started.IsSuccess ? null : started.Error);
+        string matchId = started.Value.MatchId;
+
+        // Subscribe through the typed client — the same path the live page uses.
+        ArenaResult<IAsyncEnumerable<LiveMatchEvent>> subscription =
+            await arena.SubscribeMatchLiveAsync(matchId, deadline.Token);
+        Assert.True(subscription.IsSuccess);
+
+        // Collect on a background task. The snapshot is sent on subscribe, before
+        // any increment (the match is parked), so signalling on the first event
+        // lets us release the gates only once the subscription is established.
+        var events = new List<LiveMatchEvent>();
+        var snapshotSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task collector = Task.Run(async () =>
+        {
+            await foreach (LiveMatchEvent liveEvent in subscription.Value.WithCancellation(deadline.Token))
+            {
+                events.Add(liveEvent);
+                snapshotSeen.TrySetResult();
+                if (liveEvent is LiveTerminalEvent)
+                    return;
+            }
+        });
+
+        await snapshotSeen.Task.WaitAsync(deadline.Token);
+        alpha.Release();
+        beta.Release();
+        await collector.WaitAsync(deadline.Token);
+
+        // Ordering: snapshot first, exactly one terminal, and it is last.
+        Assert.IsType<LiveSnapshotEvent>(events[0]);
+        LiveTerminalEvent terminal = Assert.IsType<LiveTerminalEvent>(events[^1]);
+        Assert.Equal(MatchStatus.Completed, terminal.Match.Status);
+        Assert.All(events.SkipLast(1), e => Assert.IsNotType<LiveTerminalEvent>(e));
+
+        // Agreement: the games finalized live equal exactly what the settled
+        // replay serves — same count, each JSON-identical.
+        ArenaResult<MatchGamesResponse> replayResult = await arena.GetMatchGamesAsync(matchId, deadline.Token);
+        Assert.True(replayResult.IsSuccess, replayResult.IsSuccess ? null : replayResult.Error);
+        MatchGamesResponse replay = replayResult.Value;
+
+        List<GameReplay> endedLive = [.. events.OfType<LiveGameEndedEvent>().Select(e => e.Game)];
+        Assert.Equal(replay.Games.Count, endedLive.Count);
+        foreach ((GameReplay served, GameReplay live) in replay.Games.Zip(endedLive))
+            Assert.Equal(Json(served), Json(live));
+
+        // Every live board state renders through the page's mapping path
+        // (DiagramContext.ForLiveGame → ReplayDiagramMapper → ReplayBoard).
+        int boardsRendered = RenderLiveBoards(terminal.Match, events);
+        Assert.True(boardsRendered > 0, "Expected at least one live board to render.");
+    }
+
+    /// <summary>
+    /// Walks the collected feed exactly as the live page does — tracking the
+    /// game-in-view context off the snapshot / game-started events — and renders
+    /// every board-bearing state through <see cref="ReplayBoard"/>, asserting
+    /// each draws. Returns the number of boards rendered.
+    /// </summary>
+    private int RenderLiveBoards(MatchSummary summary, IEnumerable<LiveMatchEvent> events)
+    {
+        int seatOneScore = 0, seatTwoScore = 0, rendered = 0;
+        bool isCrawford = false;
+        foreach (LiveMatchEvent liveEvent in events)
+        {
+            switch (liveEvent)
+            {
+                case LiveSnapshotEvent snapshot:
+                    (seatOneScore, seatTwoScore, isCrawford) =
+                        (snapshot.SeatOneScore, snapshot.SeatTwoScore, snapshot.IsCrawford);
+                    if (snapshot.Entries.Count > 0)
+                        rendered += RenderLiveEntry(summary, seatOneScore, seatTwoScore, isCrawford, snapshot.Entries[^1]);
+                    break;
+                case LiveGameStartedEvent started:
+                    (seatOneScore, seatTwoScore, isCrawford) =
+                        (started.SeatOneScore, started.SeatTwoScore, started.IsCrawford);
+                    break;
+                case LiveEntryEvent entry:
+                    rendered += RenderLiveEntry(summary, seatOneScore, seatTwoScore, isCrawford, entry.Entry);
+                    break;
+            }
+        }
+        return rendered;
+    }
+
+    private int RenderLiveEntry(
+        MatchSummary summary, int seatOneScore, int seatTwoScore, bool isCrawford, GameEntry entry)
+    {
+        DiagramContext context = DiagramContext.ForLiveGame(summary, seatOneScore, seatTwoScore, isCrawford);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(context, entry);
+        IRenderedComponent<ReplayBoard> cut = Render<ReplayBoard>(p => p.Add(c => c.Request, request));
+        Assert.NotNull(cut.Find(".replay-board svg"));
+        return 1;
+    }
+
     [Fact]
     public async Task RefusalPath_UnknownEngine_SurfacesTheTypedReasonFromTheRealServer()
     {
@@ -159,4 +300,28 @@ public class ArenaSmokeTests : BunitContext
     }
 
     private sealed class UnreachableException : Exception;
+
+    /// <summary>
+    /// A play agent that parks its first decision behind a gate, then delegates
+    /// every choice (including that first one, once released) to an inner agent.
+    /// Wrapping a seeded <see cref="RandomPlayAgent"/> keeps the match fully
+    /// deterministic — the gate only delays the first query, it never changes a
+    /// choice — while letting the test register its live subscription before any
+    /// move is recorded.
+    /// </summary>
+    private sealed class GatedPlayAgent(BgGame_Lib.IPlayAgent inner) : BgGame_Lib.IPlayAgent
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Opens the gate; the parked (and all subsequent) queries proceed.</summary>
+        public void Release() => _gate.TrySetResult();
+
+        /// <inheritdoc />
+        public async ValueTask<BgDataTypes_Lib.Play> ChoosePlayAsync(
+            BgGame_Lib.GameState state, int die1, int die2, CancellationToken cancellationToken = default)
+        {
+            await _gate.Task.WaitAsync(cancellationToken);
+            return await inner.ChoosePlayAsync(state, die1, die2, cancellationToken);
+        }
+    }
 }

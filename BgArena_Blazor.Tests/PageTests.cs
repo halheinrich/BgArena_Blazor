@@ -132,6 +132,20 @@ public class PageTests : BunitContext
     }
 
     [Fact]
+    public void MatchDetail_RunningMatch_ShowsWatchLiveInsteadOfReplay()
+    {
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", CannedJson.RunningMatch));
+
+        var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("matches/match-1/live", cut.Find("#watch-live-link").GetAttribute("href"));
+            Assert.Empty(cut.FindAll("#replay-link"));
+        });
+    }
+
+    [Fact]
     public void MatchDetail_UnknownId_RendersNotFound()
     {
         UseHandler(new RoutedJsonHandler().Map("GET /matches/nope", "", HttpStatusCode.NotFound));
