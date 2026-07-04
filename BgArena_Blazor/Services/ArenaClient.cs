@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.ServerSentEvents;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using BgTournament.Api;
 
@@ -97,6 +99,73 @@ public sealed class ArenaClient
         return await ToResultAsync<TournamentSummary>(response, cancellationToken,
             HttpStatusCode.BadRequest, HttpStatusCode.NotFound, HttpStatusCode.Conflict);
     }
+
+    /// <summary>
+    /// Subscribes to a match's live per-move feed (<c>GET /matches/{matchId}/live</c>,
+    /// an <c>text/event-stream</c>). The refusal decision is made at subscribe
+    /// time from the response status, so the documented 404 (unknown id, no
+    /// body) folds into <see cref="ArenaResult{T}"/> exactly like every other
+    /// by-id GET; a successful subscription carries the ordered event stream
+    /// inside <see cref="ArenaResult{T}.Value"/>.
+    /// <para>The house error split holds over the stream: a transport drop
+    /// mid-feed surfaces to the caller as it enumerates (the page re-subscribes;
+    /// the fresh snapshot re-establishes state — the v1 contract has no
+    /// <c>Last-Event-ID</c> resume), while a malformed event payload throws
+    /// <see cref="JsonException"/> (a producer contract break, fail loud).
+    /// Enumerating the returned stream owns the underlying response's lifetime;
+    /// disposing the enumerator (or cancelling) closes the connection.</para>
+    /// </summary>
+    public async Task<ArenaResult<IAsyncEnumerable<LiveMatchEvent>>> SubscribeMatchLiveAsync(
+        string matchId, CancellationToken cancellationToken = default)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Get, $"/matches/{Uri.EscapeDataString(matchId)}/live");
+        HttpResponseMessage response = await _http.SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            response.Dispose();
+            return ArenaResult<IAsyncEnumerable<LiveMatchEvent>>.Refused(HttpStatusCode.NotFound, error: null);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // Undocumented status: fail loud, and don't leak the response.
+            try { response.EnsureSuccessStatusCode(); }
+            finally { response.Dispose(); }
+        }
+
+        return ArenaResult<IAsyncEnumerable<LiveMatchEvent>>.Ok(StreamLiveAsync(response, cancellationToken));
+    }
+
+    /// <summary>
+    /// Drains the SSE body into the ordered event sequence, taking ownership of
+    /// the response so it (and the connection) is disposed when enumeration
+    /// ends — whether the terminal event arrives, the caller stops early, or
+    /// the token cancels.
+    /// </summary>
+    private static async IAsyncEnumerable<LiveMatchEvent> StreamLiveAsync(
+        HttpResponseMessage response, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        using (response)
+        {
+            await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            SseParser<LiveMatchEvent> parser = SseParser.Create<LiveMatchEvent>(stream, ParseLiveEvent);
+            await foreach (SseItem<LiveMatchEvent> item in parser.EnumerateAsync(cancellationToken))
+                yield return item.Data;
+        }
+    }
+
+    /// <summary>
+    /// Deserializes one SSE event's <c>data</c> payload to the discriminated
+    /// <see cref="LiveMatchEvent"/> union with plain Web defaults — the SSE
+    /// framing (event type) carries nothing load-bearing. A null payload is a
+    /// contract break.
+    /// </summary>
+    private static LiveMatchEvent ParseLiveEvent(string eventType, ReadOnlySpan<byte> data) =>
+        JsonSerializer.Deserialize<LiveMatchEvent>(data, JsonSerializerOptions.Web)
+            ?? throw new JsonException("Live feed sent a null event payload.");
 
     /// <summary>
     /// Folds a response into an <see cref="ArenaResult{T}"/>: success

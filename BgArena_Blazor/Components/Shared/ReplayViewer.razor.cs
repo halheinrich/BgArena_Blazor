@@ -99,11 +99,12 @@ public partial class ReplayViewer
     private void UpdateCurrent()
     {
         GameReplay game = CurrentGame;
+        DiagramContext context = DiagramContext.ForGame(Replay, game);
         try
         {
             CurrentRequest = Cursor < game.Entries.Count
-                ? ReplayDiagramMapper.ForEntry(Replay, game, game.Entries[Cursor])
-                : ReplayDiagramMapper.ForFinalState(Replay, game);
+                ? ReplayDiagramMapper.ForEntry(context, game.Entries[Cursor])
+                : ReplayDiagramMapper.ForFinalState(context, game.FinalState);
             MappingError = null;
         }
         catch (InvalidOperationException exception)

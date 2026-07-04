@@ -5,13 +5,15 @@ using DiagramCubeOwner = BgDataTypes_Lib.CubeOwner;
 namespace BgArena_Blazor.Services;
 
 /// <summary>
-/// The app-side glue from the replay contract (<c>BgTournament.Api</c>) onto
-/// <see cref="DiagramRequest"/> for the view-only <c>BackgammonDiagram</c>.
-/// Replay positions arrive in <b>seat One's frame</b> and are handed to the
-/// diagram unchanged: seat One is the diagram's positive ("on roll") side for
-/// the whole match, each engine's name anchors to a fixed side, and nothing
-/// is ever flipped app-side — the producer already normalized every position
-/// (its flip is the system's single re-expression).
+/// The app-side glue from a replay-contract position (<c>BgTournament.Api</c>)
+/// onto <see cref="DiagramRequest"/> for the view-only <c>BackgammonDiagram</c>,
+/// driven by a source-agnostic <see cref="DiagramContext"/> so the same mapping
+/// serves both the settled replay and the live feed. Positions arrive in
+/// <b>seat One's frame</b> and are handed to the diagram unchanged: seat One is
+/// the diagram's positive ("on roll") side for the whole match, each engine's
+/// name anchors to a fixed side, and nothing is ever flipped app-side — the
+/// producer already normalized every position (its flip is the system's single
+/// re-expression).
 /// </summary>
 public static class ReplayDiagramMapper
 {
@@ -21,21 +23,21 @@ public static class ReplayDiagramMapper
     /// (offer and response both show the same pre-double position) render
     /// cube-style, without dice.
     /// </summary>
-    public static DiagramRequest ForEntry(MatchGamesResponse match, GameReplay game, GameEntry entry) =>
+    public static DiagramRequest ForEntry(DiagramContext context, GameEntry entry) =>
         entry is PlayEntry play
-            ? Map(match, game, play.State, play.Die1, play.Die2)
-            : Map(match, game, entry.State, die1: null, die2: null);
+            ? Map(context, play.State, play.Die1, play.Die2)
+            : Map(context, entry.State, die1: null, die2: null);
 
     /// <summary>
     /// Maps the position a game ended in — the step after its last entry.
     /// Rendered cube-style: the game is over, so there is no decision and no
     /// dice to show.
     /// </summary>
-    public static DiagramRequest ForFinalState(MatchGamesResponse match, GameReplay game) =>
-        Map(match, game, game.FinalState, die1: null, die2: null);
+    public static DiagramRequest ForFinalState(DiagramContext context, GamePosition finalState) =>
+        Map(context, finalState, die1: null, die2: null);
 
     private static DiagramRequest Map(
-        MatchGamesResponse match, GameReplay game, GamePosition position, int? die1, int? die2)
+        DiagramContext context, GamePosition position, int? die1, int? die2)
     {
         var builder = new DiagramRequest.Builder
         {
@@ -44,15 +46,15 @@ public static class ReplayDiagramMapper
             Dice = die1 is null ? [0, 0] : [die1.Value, die2!.Value],
             CubeSize = position.CubeValue,
             CubeOwner = ToDiagramCubeOwner(position.CubeOwner),
-            IsCrawford = game.IsCrawford,
-            MatchLength = match.MatchLength,
+            IsCrawford = context.IsCrawford,
+            MatchLength = context.MatchLength,
             // MatchLength == 0 is the diagram's money-game sentinel; the needs
             // fields are never read on that path, so they stay 0 rather than
             // carrying a meaningless negative value.
-            OnRollNeeds = match.MatchLength == 0 ? 0 : match.MatchLength - game.SeatOneScore,
-            OpponentNeeds = match.MatchLength == 0 ? 0 : match.MatchLength - game.SeatTwoScore,
-            OnRollName = match.EngineOne,
-            OpponentName = match.EngineTwo,
+            OnRollNeeds = context.MatchLength == 0 ? 0 : context.MatchLength - context.SeatOneScore,
+            OpponentNeeds = context.MatchLength == 0 ? 0 : context.MatchLength - context.SeatTwoScore,
+            OnRollName = context.EngineOne,
+            OpponentName = context.EngineTwo,
             Mode = DiagramMode.Problem,
         };
         return builder.Build();

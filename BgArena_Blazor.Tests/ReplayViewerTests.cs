@@ -45,7 +45,7 @@ public class ReplayViewerTests : BunitContext
             FinalState: Pos());
 
     private static MatchGamesResponse TwoGameMatch() =>
-        new("match-1", "Alpha", "Beta", MatchLength: 3, [GoldenGame(), NotationGame()]);
+        new("match-1", "Alpha", "Beta", MatchLength: 3, MatchStatus.Completed, [GoldenGame(), NotationGame()]);
 
     private IRenderedComponent<ReplayViewer> RenderViewer(MatchGamesResponse? replay = null) =>
         Render<ReplayViewer>(p => p.Add(c => c.Replay, replay ?? TwoGameMatch()));
@@ -128,7 +128,7 @@ public class ReplayViewerTests : BunitContext
             SeatOneScore: 0, SeatTwoScore: 0, IsCrawford: false,
             Entries: [new PlayEntry(Seat.One, Pos(), 3, 1, [new PlayMove(8, 5)])],
             FinalState: Pos(cube: 8192, CubeOwner.SeatTwo));
-        var cut = RenderViewer(new MatchGamesResponse("m-big", "Alpha", "Beta", 0, [game]));
+        var cut = RenderViewer(new MatchGamesResponse("m-big", "Alpha", "Beta", 0, MatchStatus.Completed, [game]));
 
         Assert.NotNull(cut.Find(".replay-board svg"));
 
@@ -152,7 +152,7 @@ public class ReplayViewerTests : BunitContext
                 new CubeResponseEntry(Seat.One, Pos(), CubeResponseAction.Pass),
             ],
             FinalState: Pos());
-        var cut = RenderViewer(new MatchGamesResponse("m-pass", "Alpha", "Beta", 3, [game]));
+        var cut = RenderViewer(new MatchGamesResponse("m-pass", "Alpha", "Beta", 3, MatchStatus.Completed, [game]));
 
         cut.Find("#step-next").Click();
         Assert.Equal("Alpha passes", cut.Find("#step-caption").TextContent);

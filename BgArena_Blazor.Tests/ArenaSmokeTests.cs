@@ -119,9 +119,10 @@ public class ArenaSmokeTests : BunitContext
         foreach (GameReplay game in replay.Games)
         {
             Assert.NotEmpty(game.Entries);
+            DiagramContext context = DiagramContext.ForGame(replay, game);
             foreach (GameEntry entry in game.Entries)
-                Assert.NotNull(ReplayDiagramMapper.ForEntry(replay, game, entry));
-            Assert.NotNull(ReplayDiagramMapper.ForFinalState(replay, game));
+                Assert.NotNull(ReplayDiagramMapper.ForEntry(context, entry));
+            Assert.NotNull(ReplayDiagramMapper.ForFinalState(context, game.FinalState));
         }
 
         // And the viewer renders + steps through the whole real payload.

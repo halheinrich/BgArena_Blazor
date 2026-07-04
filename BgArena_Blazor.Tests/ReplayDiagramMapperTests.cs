@@ -6,11 +6,13 @@ using DiagramCubeOwner = BgDataTypes_Lib.CubeOwner;
 namespace BgArena_Blazor.Tests;
 
 /// <summary>
-/// Pins the GameEntry/GamePosition → DiagramRequest glue: the fixed seat-One
-/// frame (engineOne is always the diagram's positive/on-roll side — nothing
-/// flips app-side), the play-vs-cube dice split the Builder validates, the
-/// seat-keyed → diagram cube-owner mapping, and the money-session sentinel
-/// (MatchLength 0 must build — the needs fields stay 0, never negative).
+/// Pins the position → DiagramRequest glue over a <see cref="DiagramContext"/>:
+/// the fixed seat-One frame (engineOne is always the diagram's positive/on-roll
+/// side — nothing flips app-side), the play-vs-cube dice split the Builder
+/// validates, the seat-keyed → diagram cube-owner mapping, Crawford flow-through,
+/// and the money-session sentinel (MatchLength 0 must build — the needs fields
+/// stay 0, never negative). The context is source-agnostic, so these pins hold
+/// identically for the settled replay and the live feed.
 /// </summary>
 public class ReplayDiagramMapperTests
 {
@@ -21,24 +23,17 @@ public class ReplayDiagramMapperTests
     private static GamePosition Position(int cubeValue = 1, CubeOwner cubeOwner = CubeOwner.Centered) =>
         new(OpeningBoard, cubeValue, cubeOwner);
 
-    private static GameReplay Game(
-        int seatOneScore = 0, int seatTwoScore = 0, bool isCrawford = false,
-        IReadOnlyList<GameEntry>? entries = null, GamePosition? finalState = null) =>
-        new(GameNumber: 1, Seat.One, GameResultKind.Single, CubeValue: 1, Points: 1,
-            seatOneScore, seatTwoScore, isCrawford,
-            entries ?? [], finalState ?? Position());
-
-    private static MatchGamesResponse Match(int matchLength = 7, GameReplay? game = null) =>
-        new("match-1", "Alpha", "Beta", matchLength, [game ?? Game()]);
+    private static DiagramContext Context(
+        int matchLength = 7, int seatOneScore = 0, int seatTwoScore = 0, bool isCrawford = false) =>
+        new("Alpha", "Beta", matchLength, seatOneScore, seatTwoScore, isCrawford);
 
     [Fact]
     public void PlayEntry_MapsToCheckerDiagramCarryingItsDice()
     {
         var entry = new PlayEntry(Seat.Two, Position(), Die1: 3, Die2: 1,
             Moves: [new PlayMove(8, 5), new PlayMove(6, 5)]);
-        var game = Game(seatOneScore: 2, seatTwoScore: 5, entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(matchLength: 7, game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(matchLength: 7, 2, 5), entry);
 
         Assert.False(request.Decision.IsCube);
         Assert.Equal([3, 1], request.Decision.Dice);
@@ -52,9 +47,8 @@ public class ReplayDiagramMapperTests
         // The actor is seat Two, but the frame rule is fixed: engineOne is the
         // diagram's on-roll side for every position of the whole match.
         var entry = new PlayEntry(Seat.Two, Position(), Die1: 6, Die2: 2, Moves: []);
-        var game = Game(seatOneScore: 2, seatTwoScore: 5, entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(matchLength: 7, game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(matchLength: 7, 2, 5), entry);
 
         Assert.Equal("Alpha", request.Descriptive.OnRollName);
         Assert.Equal("Beta", request.Descriptive.OpponentName);
@@ -67,9 +61,8 @@ public class ReplayDiagramMapperTests
     public void DancePlay_IsAnOrdinaryPlayEntryWithDice()
     {
         var entry = new PlayEntry(Seat.One, Position(), Die1: 5, Die2: 5, Moves: []);
-        var game = Game(entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(game: game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
         Assert.False(request.Decision.IsCube);
         Assert.Equal([5, 5], request.Decision.Dice);
@@ -79,9 +72,8 @@ public class ReplayDiagramMapperTests
     public void CubeOfferEntry_MapsToCubeDiagramWithoutDice()
     {
         var entry = new CubeOfferEntry(Seat.Two, Position(cubeValue: 2, CubeOwner.SeatTwo));
-        var game = Game(entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(game: game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
         Assert.True(request.Decision.IsCube);
         Assert.Equal([0, 0], request.Decision.Dice);
@@ -92,9 +84,8 @@ public class ReplayDiagramMapperTests
     public void CubeResponseEntry_MapsToCubeDiagramWithoutDice()
     {
         var entry = new CubeResponseEntry(Seat.One, Position(), CubeResponseAction.Take);
-        var game = Game(entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(game: game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
         Assert.True(request.Decision.IsCube);
         Assert.Equal([0, 0], request.Decision.Dice);
@@ -103,9 +94,8 @@ public class ReplayDiagramMapperTests
     [Fact]
     public void FinalState_MapsTheGameEndPositionWithoutDice()
     {
-        var game = Game(finalState: Position(cubeValue: 4, CubeOwner.SeatOne));
-
-        DiagramRequest request = ReplayDiagramMapper.ForFinalState(Match(game: game), game);
+        DiagramRequest request = ReplayDiagramMapper.ForFinalState(
+            Context(), Position(cubeValue: 4, CubeOwner.SeatOne));
 
         Assert.True(request.Decision.IsCube);
         Assert.Equal(4, request.Position.CubeSize);
@@ -118,9 +108,8 @@ public class ReplayDiagramMapperTests
     [InlineData(CubeOwner.SeatTwo, DiagramCubeOwner.Opponent)]
     public void CubeOwner_MapsSeatKeyedOntoTheFixedFrame(CubeOwner apiOwner, DiagramCubeOwner expected)
     {
-        var game = Game(finalState: Position(cubeValue: 2, apiOwner));
-
-        DiagramRequest request = ReplayDiagramMapper.ForFinalState(Match(game: game), game);
+        DiagramRequest request = ReplayDiagramMapper.ForFinalState(
+            Context(), Position(cubeValue: 2, apiOwner));
 
         Assert.Equal(expected, request.Position.CubeOwner);
     }
@@ -129,9 +118,9 @@ public class ReplayDiagramMapperTests
     public void Crawford_FlowsThrough()
     {
         var entry = new PlayEntry(Seat.One, Position(), Die1: 2, Die2: 1, Moves: []);
-        var game = Game(seatOneScore: 6, seatTwoScore: 3, isCrawford: true, entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(matchLength: 7, game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(
+            Context(matchLength: 7, seatOneScore: 6, seatTwoScore: 3, isCrawford: true), entry);
 
         Assert.True(request.Position.IsCrawford);
     }
@@ -143,13 +132,29 @@ public class ReplayDiagramMapperTests
         // cap). The mapper must build — the diagram keys money rendering off
         // MatchLength == 0 and never reads the needs fields on that path.
         var entry = new PlayEntry(Seat.One, Position(), Die1: 4, Die2: 2, Moves: []);
-        var game = Game(seatOneScore: 5, seatTwoScore: 3, entries: [entry]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Match(matchLength: 0, game), game, entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(
+            Context(matchLength: 0, seatOneScore: 5, seatTwoScore: 3), entry);
 
         Assert.Equal(0, request.Descriptive.MatchLength);
         Assert.Equal(0, request.Position.OnRollNeeds);
         Assert.Equal(0, request.Position.OpponentNeeds);
+    }
+
+    [Fact]
+    public void ForGame_DerivesTheContextFromTheReplayPayload()
+    {
+        // The settled-replay factory pulls match-level facts from the response
+        // and game-level facts from the game — the same six facts the live
+        // factory sources from the summary + snapshot.
+        var game = new GameReplay(GameNumber: 1, Seat.One, GameResultKind.Single, CubeValue: 1,
+            Points: 1, SeatOneScore: 6, SeatTwoScore: 3, IsCrawford: true,
+            Entries: [], FinalState: Position());
+        var match = new MatchGamesResponse("match-1", "Alpha", "Beta", 7, MatchStatus.Completed, [game]);
+
+        DiagramContext context = DiagramContext.ForGame(match, game);
+
+        Assert.Equal(new DiagramContext("Alpha", "Beta", 7, 6, 3, true), context);
     }
 
     [Fact]
@@ -164,11 +169,10 @@ public class ReplayDiagramMapperTests
             new CubeOfferEntry(Seat.Two, Position()),
             new CubeResponseEntry(Seat.One, Position(), CubeResponseAction.Take),
         };
-        var game = Game(entries: entries, finalState: Position(cubeValue: 2, CubeOwner.SeatOne));
-        var match = Match(matchLength: 3, game);
+        DiagramContext context = Context(matchLength: 3);
 
         foreach (GameEntry entry in entries)
-            Assert.NotNull(ReplayDiagramMapper.ForEntry(match, game, entry));
-        Assert.NotNull(ReplayDiagramMapper.ForFinalState(match, game));
+            Assert.NotNull(ReplayDiagramMapper.ForEntry(context, entry));
+        Assert.NotNull(ReplayDiagramMapper.ForFinalState(context, Position(cubeValue: 2, CubeOwner.SeatOne)));
     }
 }
