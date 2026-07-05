@@ -104,6 +104,41 @@ public sealed class ArenaClient
     }
 
     /// <summary>
+    /// Downloads a terminal match's Jellyfish <c>.MAT</c> transcript
+    /// (<c>GET /matches/{matchId}/export.mat</c>) as file bytes with the content
+    /// type and download filename the server served them under. Available for
+    /// every terminal match — the full transcript when
+    /// <see cref="MatchStatus.Completed"/>, and the games that finished before
+    /// the break (with a note comment) for a forfeited/aborted/faulted one.
+    /// The success payload is an opaque file rather than a JSON shape, so the
+    /// refusal fold is spelled out here rather than routed through
+    /// <see cref="ToResultAsync{T}"/> (which deserializes a JSON body).
+    /// Documented refusals: 404 (unknown id, no body); 409 with a reason (the
+    /// match is still <see cref="MatchStatus.Running"/> — the export becomes
+    /// available once it ends; its games stream live from
+    /// <c>/matches/{matchId}/live</c> meanwhile).
+    /// </summary>
+    public async Task<ArenaResult<MatchExportFile>> ExportMatchAsync(string matchId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync($"/matches/{Uri.EscapeDataString(matchId)}/export.mat", cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return ArenaResult<MatchExportFile>.Refused(HttpStatusCode.NotFound, error: null);
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+            return ArenaResult<MatchExportFile>.Refused(
+                HttpStatusCode.Conflict, await ReadRefusalReasonAsync(response, cancellationToken));
+
+        // Any other non-success is undocumented: fail loud, per the contract.
+        response.EnsureSuccessStatusCode();
+
+        byte[] content = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        string? contentType = response.Content.Headers.ContentType?.ToString();
+        string? fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('"');
+        return ArenaResult<MatchExportFile>.Ok(new MatchExportFile(content, contentType, fileName));
+    }
+
+    /// <summary>
     /// Subscribes to a match's live per-move feed (<c>GET /matches/{matchId}/live</c>,
     /// an <c>text/event-stream</c>). The refusal decision is made at subscribe
     /// time from the response status, so the documented 404 (unknown id, no
@@ -191,13 +226,22 @@ public sealed class ArenaClient
         if (!documentedRefusals.Contains(response.StatusCode))
             response.EnsureSuccessStatusCode();
 
-        // Read as text first: a bodyless documented refusal (404 from a by-id
-        // GET) has no ErrorResponse to parse, and this stays correct even when
-        // the transport omits Content-Length.
+        return ArenaResult<T>.Refused(
+            response.StatusCode, await ReadRefusalReasonAsync(response, cancellationToken));
+    }
+
+    /// <summary>
+    /// Reads a documented refusal's reason: the <see cref="ErrorResponse"/>
+    /// message when the refusal carried a body, or null for a bodyless one
+    /// (a 404 from a by-id GET). Reads as text first so a missing body stays
+    /// correct even when the transport omits <c>Content-Length</c>.
+    /// </summary>
+    private static async Task<string?> ReadRefusalReasonAsync(
+        HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         string body = await response.Content.ReadAsStringAsync(cancellationToken);
-        string? error = string.IsNullOrWhiteSpace(body)
+        return string.IsNullOrWhiteSpace(body)
             ? null
             : JsonSerializer.Deserialize<ErrorResponse>(body, JsonSerializerOptions.Web)?.Error;
-        return ArenaResult<T>.Refused(response.StatusCode, error);
     }
 }

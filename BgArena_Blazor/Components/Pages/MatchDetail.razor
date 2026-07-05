@@ -63,6 +63,10 @@ else
            the games that finished before the break otherwise (the page signals
            the partiality). *@
         <a id="replay-link" class="button" href="@($"matches/{Match.MatchId}/replay")">View replay</a>
+        @* …and a downloadable Jellyfish .MAT of the same transcript. The href is
+           this host's relay (a same-origin file download — plain anchor, the
+           attachment disposition drives the browser), not the internal server. *@
+        <a id="download-mat-link" class="button" href="@($"matches/{Match.MatchId}/export.mat")">Download .MAT</a>
     }
 
     <p><a href="matches">Back to matches</a></p>

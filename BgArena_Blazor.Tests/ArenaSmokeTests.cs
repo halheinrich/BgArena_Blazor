@@ -1,6 +1,7 @@
 extern alias TournamentServer;
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text.Json;
 using BackgammonDiagram_Lib;
@@ -9,7 +10,10 @@ using BgArena_Blazor.Services;
 using BgTournament.Api;
 using BgTournament.EngineClient;
 using Bunit;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using Engine = BgTournament.EngineClient.EngineClient;
 
 namespace BgArena_Blazor.Tests;
@@ -297,6 +301,50 @@ public class ArenaSmokeTests : BunitContext
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.NotFound, result.StatusCode);
         Assert.False(string.IsNullOrWhiteSpace(result.Error));
+    }
+
+    [Fact]
+    public async Task ExportRelayPath_WireMatchToCompletion_ArenaRelayBytesEqualTheServersDirectExport()
+    {
+        // Both hosts in-proc: the real tournament server (upstream) and the real
+        // Arena host, whose ArenaClient is pointed at the server's TestServer so
+        // the relay reaches it exactly as the deployed host would — server to
+        // server, the browser never touching the internal server.
+        using var server = new WebApplicationFactory<TournamentServer::Program>();
+        var arena = new ArenaClient(server.CreateClient());
+        using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+                services.AddHttpClient<ArenaClient>(client => client.BaseAddress = server.Server.BaseAddress)
+                    .ConfigurePrimaryHttpMessageHandler(() => server.Server.CreateHandler())));
+
+        await ConnectReferenceEngineAsync(server, "RelayAlpha", seed: 11);
+        await ConnectReferenceEngineAsync(server, "RelayBeta", seed: 22);
+        await WaitForEnginesAsync(arena, "RelayAlpha", "RelayBeta");
+
+        ArenaResult<MatchSummary> started = await arena.StartMatchAsync(
+            new StartMatchRequest("RelayAlpha", "RelayBeta", MatchLength: 2, Seed: 4242));
+        Assert.True(started.IsSuccess, started.IsSuccess ? null : started.Error);
+        string matchId = started.Value.MatchId;
+
+        MatchSummary finished = await WaitForCompletionAsync(arena, matchId);
+        Assert.Equal(MatchStatus.Completed, finished.Status);
+
+        // The server's own export, taken directly — the ground truth.
+        using var direct = server.CreateClient();
+        byte[] directBytes = await direct.GetByteArrayAsync($"/matches/{matchId}/export.mat");
+
+        // The same export, pulled through the Arena relay by a browser-side GET.
+        using var browser = host.CreateClient();
+        var relayed = await browser.GetAsync($"/matches/{matchId}/export.mat");
+        Assert.Equal(HttpStatusCode.OK, relayed.StatusCode);
+
+        // The bytes are identical — the wire loop closes — and the download
+        // headers survive the relay unchanged.
+        Assert.Equal(directBytes, await relayed.Content.ReadAsByteArrayAsync());
+        Assert.Equal("text/plain", relayed.Content.Headers.ContentType?.MediaType);
+        ContentDispositionHeaderValue? disposition = relayed.Content.Headers.ContentDisposition;
+        Assert.Equal("attachment", disposition?.DispositionType);
+        Assert.Contains($"match_{matchId}.mat", $"{disposition?.FileName} {disposition?.FileNameStar}");
     }
 
     private sealed class UnreachableException : Exception;

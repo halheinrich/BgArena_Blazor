@@ -1,6 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <!-- Test-only: the relay and gating smoke boot this host in-proc via
+         WebApplicationFactory<Program>, which needs the internal Program
+         anchor. No runtime surface is exposed. -->
+    <InternalsVisibleTo Include="BgArena_Blazor.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- BgTournament.Api is the admin HTTP contract (zero-dep shapes) — the
          app's entire JSON vocabulary. The server itself is reached over HTTP
          only; BgTournament.Server/.Protocol/.Core are never referenced here. -->

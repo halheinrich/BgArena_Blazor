@@ -131,8 +131,26 @@ public class PageTests : BunitContext
         });
     }
 
+    // A terminal match — any of the four terminal statuses — offers the .MAT
+    // download beside the replay, pointing at this host's relay (not the
+    // internal server). Mirrors how the watch-live link keys off Running.
+    [Theory]
+    [InlineData("completed")]
+    [InlineData("forfeited")]
+    [InlineData("aborted")]
+    [InlineData("faulted")]
+    public void MatchDetail_TerminalMatch_OffersTheMatDownload(string status)
+    {
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", TerminalMatchJson(status)));
+
+        var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+            Assert.Equal("matches/match-1/export.mat", cut.Find("#download-mat-link").GetAttribute("href")));
+    }
+
     [Fact]
-    public void MatchDetail_RunningMatch_ShowsWatchLiveInsteadOfReplay()
+    public void MatchDetail_RunningMatch_ShowsWatchLiveInsteadOfReplayOrDownload()
     {
         UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", CannedJson.RunningMatch));
 
@@ -142,8 +160,14 @@ public class PageTests : BunitContext
         {
             Assert.Equal("matches/match-1/live", cut.Find("#watch-live-link").GetAttribute("href"));
             Assert.Empty(cut.FindAll("#replay-link"));
+            Assert.Empty(cut.FindAll("#download-mat-link"));
         });
     }
+
+    /// <summary>A terminal match record with the given status; fields the
+    /// affordance does not read are null (a running match is elsewhere).</summary>
+    private static string TerminalMatchJson(string status) =>
+        $$"""{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"status":"{{status}}","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null}""";
 
     [Fact]
     public void MatchDetail_UnknownId_RendersNotFound()
