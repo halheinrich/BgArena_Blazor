@@ -161,7 +161,7 @@ public class ArenaClientTests
         Assert.Equal("/matches", handler.LastRequestUri?.AbsolutePath);
         // The serialized body must be the producer golden's request text.
         Assert.Equal(
-            """{"engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"seed":42,"maxGames":50}""",
+            """{"engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"seed":42,"maxGames":50,"timeControl":null}""",
             handler.LastRequestBody);
         Assert.True(result.IsSuccess);
         Assert.Equal(MatchStatus.Running, result.Value.Status);

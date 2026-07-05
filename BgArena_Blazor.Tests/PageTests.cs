@@ -71,7 +71,7 @@ public class PageTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(
-                """{"engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"seed":null,"maxGames":null}""",
+                """{"engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"seed":null,"maxGames":null,"timeControl":null}""",
                 handler.LastPostBody);
             var navigation = Services.GetRequiredService<NavigationManager>();
             Assert.EndsWith("matches/match-1", navigation.Uri);
@@ -205,7 +205,7 @@ public class PageTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(
-                """{"participants":["Beta","Alpha"],"matchLength":5,"matchesPerPairing":2,"seed":null}""",
+                """{"participants":["Beta","Alpha"],"matchLength":5,"matchesPerPairing":2,"seed":null,"timeControl":null}""",
                 handler.LastPostBody);
             var navigation = Services.GetRequiredService<NavigationManager>();
             Assert.EndsWith("tournaments/tour-1", navigation.Uri);
