@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text.Json;
 using BackgammonDiagram_Lib;
+using BgArena_Blazor.Components.Pages;
 using BgArena_Blazor.Components.Shared;
 using BgArena_Blazor.Services;
 using BgTournament.Api;
@@ -97,6 +98,9 @@ public class ArenaSmokeTests : BunitContext
     {
         using var factory = new IsolatedTournamentServer();
         var arena = new ArenaClient(factory.CreateClient());
+        // Registered up front (bUnit locks the service collection at first
+        // render): the audit page rendered at the end resolves this client.
+        Services.AddSingleton(arena);
 
         // Two reference engines over the real wire; fully deterministic seeds.
         await ConnectReferenceEngineAsync(factory, "SmokeAlpha", seed: 11);
@@ -151,6 +155,66 @@ public class ArenaSmokeTests : BunitContext
             Assert.Contains("over —", cut.Find("#step-caption").TextContent);
             Assert.True(cut.Find("#step-next").HasAttribute("disabled"));
         }
+
+        // The audit contract against the server's real JSON: the arbitration
+        // timeline of the just-driven match, created-first / terminal-last,
+        // whole (no integrity note), with every decision event joining into
+        // the served replay's bounds. An explicit-seed flat-regime match
+        // carries no fair-dice packet and no clock evidence — the clockless
+        // timeline is the normal shape here, not a gap.
+        ArenaResult<MatchAuditResponse> auditResult = await arena.GetMatchAuditAsync(matchId);
+        Assert.True(auditResult.IsSuccess, auditResult.IsSuccess ? null : auditResult.Error);
+        MatchAuditResponse audit = auditResult.Value;
+        Assert.Equal((matchId, "SmokeAlpha", "SmokeBeta"), (audit.MatchId, audit.EngineOne, audit.EngineTwo));
+        Assert.Equal(MatchStatus.Completed, audit.Status);
+        Assert.Null(audit.Integrity);
+
+        AuditCreatedEvent created = Assert.IsType<AuditCreatedEvent>(audit.Events[0]);
+        Assert.Equal((2, 4242), (created.MatchLength, created.Seed));
+        Assert.Null(created.DiceAlgorithm);     // explicit seed: no fair-dice packet
+        Assert.Null(created.DiceCommitment);
+        Assert.Null(created.TimeControl);       // flat regime: no clock evidence
+        Assert.DoesNotContain(audit.Events, e => e is AuditClockEvent);
+
+        AuditTerminalEvent terminal = Assert.IsType<AuditTerminalEvent>(audit.Events[^1]);
+        Assert.Equal(MatchStatus.Completed, terminal.Status);
+        Assert.Equal(finished.Winner, terminal.Winner);
+        Assert.Equal((finished.SeatOneScore, finished.SeatTwoScore),
+            (terminal.SeatOneScore, terminal.SeatTwoScore));
+
+        Assert.Contains(audit.Events, e => e is AuditStartedEvent);
+        Assert.Equal(replay.Games.Count, audit.Events.OfType<AuditGameStartedEvent>().Count());
+        Assert.Equal(replay.Games.Count, audit.Events.OfType<AuditGameEndedEvent>().Count());
+
+        // Every decision event's replay join (game number + 0-based entry
+        // index) lands inside the served replay.
+        foreach (AuditEvent auditEvent in audit.Events)
+        {
+            (int GameNumber, int EntryIndex)? join = auditEvent switch
+            {
+                AuditPlayEvent play => (play.GameNumber, play.EntryIndex),
+                AuditCubeOfferEvent offer => (offer.GameNumber, offer.EntryIndex),
+                AuditCubeResponseEvent response => (response.GameNumber, response.EntryIndex),
+                _ => null,
+            };
+            if (join is { } reference)
+            {
+                Assert.InRange(reference.GameNumber, 1, replay.Games.Count);
+                Assert.InRange(reference.EntryIndex, 0, replay.Games[reference.GameNumber - 1].Entries.Count - 1);
+            }
+        }
+
+        // And the audit page renders the real payload end to end: one
+        // narrated, type-styled row per event over the real wire.
+        var auditPage = Render<MatchAudit>(p => p.Add(c => c.MatchId, matchId));
+        auditPage.WaitForAssertion(() =>
+        {
+            var rows = auditPage.FindAll(".audit-table tbody tr");
+            Assert.Equal(audit.Events.Count, rows.Count);
+            Assert.All(rows, row => Assert.NotEqual(string.Empty, row.TextContent.Trim()));
+            Assert.Contains("Match completed", rows[^1].TextContent);
+            Assert.Empty(auditPage.FindAll("#clock-legend"));   // flat regime, no legend
+        });
     }
 
     /// <summary>
@@ -220,6 +284,15 @@ public class ArenaSmokeTests : BunitContext
         });
 
         await snapshotSeen.Task.WaitAsync(deadline.Token);
+
+        // While the match runs (parked behind the gates), the audit is
+        // refused with the documented 409 pointing at the live feed — the
+        // terminal-only gate proven over the real wire.
+        ArenaResult<MatchAuditResponse> auditRefused = await arena.GetMatchAuditAsync(matchId, deadline.Token);
+        Assert.False(auditRefused.IsSuccess);
+        Assert.Equal(HttpStatusCode.Conflict, auditRefused.StatusCode);
+        Assert.Contains($"/matches/{matchId}/live", auditRefused.Error);
+
         alpha.Release();
         beta.Release();
         await collector.WaitAsync(deadline.Token);

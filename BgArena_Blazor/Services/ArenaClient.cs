@@ -79,6 +79,24 @@ public sealed class ArenaClient
     }
 
     /// <summary>
+    /// Fetches a terminal match's arbitration timeline
+    /// (<c>GET /matches/{matchId}/audit</c>): timestamps, attribution,
+    /// per-decision clock evidence, discipline events, and the terminal
+    /// outcome with its structured cause — no boards or moves (the replay
+    /// surface's job). Documented refusals mirror the replay endpoint:
+    /// 404 (unknown id, no body — or with a reason when the record exists
+    /// but its audit journal cannot be read); 409 with a reason (the match
+    /// is still <see cref="MatchStatus.Running"/> — watch it at
+    /// <c>/matches/{matchId}/live</c> and audit it once it ends).
+    /// </summary>
+    public async Task<ArenaResult<MatchAuditResponse>> GetMatchAuditAsync(string matchId, CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.GetAsync($"/matches/{Uri.EscapeDataString(matchId)}/audit", cancellationToken);
+        return await ToResultAsync<MatchAuditResponse>(response, cancellationToken,
+            HttpStatusCode.NotFound, HttpStatusCode.Conflict);
+    }
+
+    /// <summary>
     /// Starts a standalone match between two connected engines
     /// (<c>POST /matches</c>). Documented refusals: 400 (invalid request),
     /// 404 (unknown engine), 409 (engine busy / same engine twice) — each with

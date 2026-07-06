@@ -28,12 +28,18 @@ else
         <dd>@string.Join(", ", Tournament.Participants)</dd>
         <dt>Format</dt>
         <dd>@Tournament.MatchLength points · each pairing @Tournament.MatchesPerPairing×</dd>
+        <dt>Time control</dt>
+        <dd id="time-control">@ArenaDisplay.TimeControlText(Tournament.TimeControl)</dd>
         <dt>Status</dt>
         <dd><span class="@ArenaDisplay.StatusCss(Tournament.Status)">@Tournament.Status</span></dd>
         <dt>Winner</dt>
         <dd>@(Tournament.Winner ?? "—")</dd>
         <dt>Seed</dt>
         <dd>@Tournament.Seed</dd>
+        <dt>Started (UTC)</dt>
+        <dd id="started-at">@ArenaDisplay.TimestampText(Tournament.StartedAtUtc)</dd>
+        <dt>Ended (UTC)</dt>
+        <dd id="ended-at">@ArenaDisplay.EndedText(Tournament.Status != TournamentStatus.Running, Tournament.StartedAtUtc, Tournament.EndedAtUtc)</dd>
         @if (Tournament.Detail is { } detail)
         {
             <dt>Detail</dt>

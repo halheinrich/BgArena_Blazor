@@ -1,0 +1,104 @@
+@page "/matches/{MatchId}/audit"
+
+<PageTitle>Audit @MatchId — BgArena</PageTitle>
+
+@if (NotFound)
+{
+    <h1>Audit</h1>
+    @* The endpoint's two documented 404 flavors: unknown id (bodyless), or a
+       known record whose audit journal cannot be read (the reason names it). *@
+    <div class="banner banner-error" role="alert">@(NotFoundReason ?? $"No match with id '{MatchId}'.")</div>
+    <p><a href="matches">Back to matches</a></p>
+}
+else if (RefusalReason is { } reason)
+{
+    <h1>Audit</h1>
+    @* 409: the match is still running — its games stream live meanwhile. *@
+    <div id="audit-refused" class="banner banner-error" role="alert">@reason</div>
+    <p>
+        <a id="audit-live-link" href="@($"matches/{MatchId}/live")">Watch live</a>
+        <a href="@($"matches/{MatchId}")">Back to match</a>
+        <button id="retry-audit" @onclick="LoadAsync">Retry</button>
+    </p>
+}
+else if (Unreachable)
+{
+    <h1>Audit</h1>
+    <div class="banner banner-error" role="alert">Tournament server unreachable.</div>
+    <p>
+        <a href="@($"matches/{MatchId}")">Back to match</a>
+        <button id="retry-audit" @onclick="LoadAsync">Retry</button>
+    </p>
+}
+else if (Audit is null)
+{
+    <h1>Audit</h1>
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <h1>@Audit.EngineOne vs @Audit.EngineTwo</h1>
+    <p class="muted">
+        Audit timeline · match @Audit.MatchId ·
+        <span class="@ArenaDisplay.StatusCss(Audit.Status)">@Audit.Status</span>
+    </p>
+
+    @if (Audit.Integrity is { } integrity)
+    {
+        <div id="audit-integrity" class="banner banner-warn" role="status">
+            Journal integrity: @integrity — showing the trusted prefix, plus the record-derived terminal event.
+        </div>
+    }
+
+    @if (IsClocked)
+    {
+        <p id="clock-legend" class="muted">@AuditNarration.ClockCorrelationNote</p>
+    }
+
+    <table class="data-table audit-table">
+        <thead>
+            <tr>
+                <th>When (UTC)</th>
+                <th>Event</th>
+                <th>What happened</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (AuditEvent auditEvent in Audit.Events)
+            {
+                string kind = AuditNarration.Kind(auditEvent);
+                <tr class="audit-row audit-@kind.ToLowerInvariant()">
+                    <td class="audit-time">@AuditNarration.TimeText(auditEvent.At)</td>
+                    <td><span class="audit-kind kind-@kind.ToLowerInvariant()">@kind</span></td>
+                    <td>
+                        @AuditNarration.Caption(Audit, auditEvent)
+                        @if (AuditNarration.Reference(auditEvent) is { } reference)
+                        {
+                            <span class="audit-ref muted"> · @reference</span>
+                        }
+                        @* Fair-dice fields render verbatim only — the endpoint is a
+                           self-contained verification packet for an external arbiter;
+                           re-verifying it here is explicitly declined. *@
+                        @if (auditEvent is AuditCreatedEvent { DiceCommitment: { } commitment })
+                        {
+                            <div class="audit-hex"><span class="muted">commitment</span> <code>@commitment</code></div>
+                        }
+                        @if (auditEvent is AuditTerminalEvent terminal)
+                        {
+                            @if (terminal.Detail is { } detail)
+                            {
+                                <div class="audit-detail muted">@detail</div>
+                            }
+                            @if (terminal.DiceKey is { } key)
+                            {
+                                <div class="audit-hex"><span class="muted">revealed key</span> <code>@key</code></div>
+                            }
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p><a href="@($"matches/{MatchId}")">Back to match</a></p>
+}

@@ -28,6 +28,8 @@ else
         <dd>@Match.MatchId</dd>
         <dt>Length</dt>
         <dd>@ArenaDisplay.LengthText(Match.MatchLength, Match.MaxGames)</dd>
+        <dt>Time control</dt>
+        <dd id="time-control">@ArenaDisplay.TimeControlText(Match.TimeControl)</dd>
         <dt>Status</dt>
         <dd><span class="@ArenaDisplay.StatusCss(Match.Status)">@Match.Status</span></dd>
         <dt>Winner</dt>
@@ -36,6 +38,10 @@ else
         <dd>@ArenaDisplay.ScoreText(Match)</dd>
         <dt>Seed</dt>
         <dd>@Match.Seed</dd>
+        <dt>Started (UTC)</dt>
+        <dd id="started-at">@ArenaDisplay.TimestampText(Match.StartedAtUtc)</dd>
+        <dt>Ended (UTC)</dt>
+        <dd id="ended-at">@ArenaDisplay.EndedText(Match.Status != MatchStatus.Running, Match.StartedAtUtc, Match.EndedAtUtc)</dd>
         @if (Match.MaxGames is { } maxGames && Match.MatchLength != 0)
         {
             <dt>Games cap</dt>
@@ -44,7 +50,15 @@ else
         @if (Match.ForfeitedBy is { } forfeitedBy)
         {
             <dt>Forfeited by</dt>
-            <dd>@forfeitedBy</dd>
+            <dd>
+                @forfeitedBy
+                @* The structured cause beside the name; Detail below stays the
+                   human-readable companion. *@
+                @if (Match.ForfeitCause is { } cause)
+                {
+                    <span class="@ArenaDisplay.ForfeitCauseCss(cause)">@ArenaDisplay.ForfeitCauseText(cause)</span>
+                }
+            </dd>
         }
         @if (Match.Detail is { } detail)
         {
@@ -63,6 +77,9 @@ else
            the games that finished before the break otherwise (the page signals
            the partiality). *@
         <a id="replay-link" class="button" href="@($"matches/{Match.MatchId}/replay")">View replay</a>
+        @* …its arbitration timeline (the audit surface — timestamps, clock
+           evidence, the structured outcome)… *@
+        <a id="audit-link" class="button" href="@($"matches/{Match.MatchId}/audit")">View audit</a>
         @* …and a downloadable Jellyfish .MAT of the same transcript. The href is
            this host's relay (a same-origin file download — plain anchor, the
            attachment disposition drives the browser), not the internal server. *@

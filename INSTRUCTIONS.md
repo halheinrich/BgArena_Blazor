@@ -66,17 +66,21 @@ BgArena_Blazor/
 │   │   ├── Matches.razor(.cs)          "/matches" — launch form + newest-first listing
 │   │   ├── MatchDetail.razor(.cs)      "/matches/{MatchId}" — record card; polls while Running
 │   │   ├── MatchReplay.razor(.cs)      "/matches/{MatchId}/replay" — load-once (partial for non-completed)
+│   │   ├── MatchAudit.razor(.cs)       "/matches/{MatchId}/audit" — load-once arbitration timeline (terminal-only)
 │   │   ├── LiveMatch.razor(.cs)        "/matches/{MatchId}/live" — follow-live board over the SSE feed
 │   │   ├── Tournaments.razor(.cs)      "/tournaments" — create form + listing
 │   │   └── TournamentDetail.razor(.cs) "/tournaments/{TournamentId}" — standings + ledger
 │   └── Shared/
 │       ├── PollingComponentBase.cs     the one polling implementation
 │       ├── ConnectionBanner.razor      the unreachable-server banner
-│       ├── ArenaDisplay.cs             status-CSS / length / score / match-kind wording (SSOT)
+│       ├── ArenaDisplay.cs             status-CSS / length / score / match-kind / time-and-duration /
+│       │                               time-control / forfeit-cause wording (SSOT)
 │       ├── MatchesTable.razor(.cs)     the one MatchSummary row renderer
+│       ├── ClockIndicator.razor(.cs)   the one clocked-match table indicator (null = flat regime, nothing)
 │       ├── StandingsTable.razor(.cs)
 │       ├── TournamentLedger.razor(.cs)
 │       ├── ReplayNarration.cs          per-entry caption wording (replay + live SSOT)
+│       ├── AuditNarration.cs           audit-timeline wording SSOT (kind / caption / replay join / legend)
 │       ├── ReplayViewer.razor(.cs)     game picker + entry stepper + captions + board
 │       └── ReplayBoard.razor(.cs)      the one sized container over BackgammonDiagram
 └── wwwroot/app.css
@@ -88,8 +92,10 @@ BgArena_Blazor.Tests/
 ├── CannedJson.cs                       shared golden-shaped fixtures (convenience, see Pitfalls)
 ├── SharedTableTests.cs                 bUnit: tables, links, money wording
 ├── PageTests.cs                        bUnit: dashboards, forms, refusals, banners
+├── ArenaDisplayTests.cs                unit: timestamp/duration/time-control/cause formatting boundaries
 ├── ReplayViewerTests.cs                bUnit: stepping, captions, undrawable-position path
 ├── MatchReplayPageTests.cs             bUnit: page outcomes (golden / partial / 409 / 404)
+├── MatchAuditPageTests.cs              bUnit: timeline rows, narration, clockless shape, refusals
 ├── LiveMatchPageTests.cs               bUnit: live page over an SSE stub (snapshot/entry/terminal/drop)
 └── ArenaSmokeTests.cs                  THE gating smoke — real server, real wire, no stubs
 ```
@@ -99,11 +105,12 @@ BgArena_Blazor.Tests/
 **What this is.** The tournament arena's admin console and spectator
 front-end: polling dashboards over BgTournament's admin HTTP API (engines,
 matches, tournaments — with launch/create forms), step-through replay of
-terminal matches rendered on `BackgammonDiagram`, and a follow-live per-move
-view of a running match over the server's SSE feed.
+terminal matches rendered on `BackgammonDiagram`, a verbatim audit-timeline
+viewer for terminal matches, and a follow-live per-move view of a running
+match over the server's SSE feed.
 
 **One route to the server.** `ArenaClient` is the only thing that speaks
-HTTP: eight endpoints over one `IHttpClientFactory` typed client whose base
+HTTP: nine endpoints over one `IHttpClientFactory` typed client whose base
 address is configuration (`Arena:BaseAddress` — the UI host calls the
 tournament server server-to-server, so CORS never enters). JSON is plain Web
 defaults end to end, zero converter configuration — the producer contract
@@ -176,6 +183,26 @@ into the circuit. `ArenaClient.SubscribeMatchLiveAsync` decides the documented
 ordered stream lives inside `Ok`, and an inner iterator owns the response
 lifetime.
 
+**Audit: verbatim rows, never joins.** `MatchAudit` renders a terminal
+match's arbitration timeline (`GET /matches/{matchId}/audit`) as a flat list
+of type-styled rows, one per event, worded by `AuditNarration` (the audit
+sibling of `ReplayNarration`). Load-once like replay, and the refusals
+mirror it: 404 is an unknown id — or, this endpoint's second documented
+flavor, a known record whose journal cannot be read, in which case the 404
+carries the server's reason; 409 means still running, and the page offers
+the live view. Everything renders verbatim: the fair-dice fields
+(commitment / algorithm / revealed key) are displayed as-is for an external
+arbiter — independent re-verification is explicitly declined (user ruling
+2026-07-04) — and the packet's documented correlation semantics
+(clock-precedes-decision, declined double windows, the trailing fatal clock)
+surface only as the static legend on clocked timelines, never as computed
+clock→decision joins or think-time aggregates (those would re-encode the
+producer's ordering contract app-side; aggregates, if ever wanted, are a
+future producer-side projection). A clockless (flat-regime) timeline simply
+has no clock rows — normal, not a gap, so the legend is omitted there. The
+envelope's `integrity` note, when present, renders as a trusted-prefix
+warning banner.
+
 **Fail visible at the render boundary.** The viewer maps inside a try/catch:
 a position the Builder refuses renders an explicit "cannot be rendered"
 panel in place of the board while stepping stays alive. No clamping, no
@@ -194,13 +221,18 @@ Smoke (gating): `ArenaSmokeTests` boots the real server in-proc, connects
 two reference engines over real WebSockets, drives a fixed-seed match to
 completion through `ArenaClient`, consumes the replay endpoint's real JSON,
 maps every entry and finalState of every game, and renders + steps
-`ReplayViewer` through the whole payload. A second smoke subscribes to the
-real live feed: reference engines are gated shut (a `GatedPlayAgent` wrapping
-the seeded random bot) so the subscriber joins while the match is parked and
-catches the stream from the top; it asserts snapshot-first / terminal-last
-ordering, that the games finalized live are JSON-identical to the served
-replay, and that every live board renders through the page's mapping path. The
-canned fixtures are convenience copies; **the smoke is where the contract is
+`ReplayViewer` through the whole payload; it then consumes the audit
+endpoint's real JSON (created-first / terminal-last, every decision event's
+replay join inside the served replay's bounds, the clockless flat-regime
+shape) and renders the audit page over the real payload. A second smoke
+subscribes to the real live feed: reference engines are gated shut (a
+`GatedPlayAgent` wrapping the seeded random bot) so the subscriber joins
+while the match is parked and catches the stream from the top; it asserts
+snapshot-first / terminal-last ordering, that the games finalized live are
+JSON-identical to the served replay, that every live board renders through
+the page's mapping path — and, while the match is parked, that the audit
+endpoint answers its documented 409 pointing at the live feed. The canned
+fixtures are convenience copies; **the smoke is where the contract is
 proven.**
 
 ## Public API
@@ -212,8 +244,9 @@ Razor component model requires it). Its outward surface is the UI:
 ```
 /                                   connected engines (claimed/idle), polling
 /matches                            launch form + all matches, newest first (watch-live link on Running rows)
-/matches/{matchId}                  record card; polls while Running; watch-live when Running, else replay
+/matches/{matchId}                  record card; polls while Running; watch-live when Running, else replay + audit + .MAT
 /matches/{matchId}/replay           step-through replay (load-once; partiality note for non-completed)
+/matches/{matchId}/audit            arbitration timeline, verbatim rows (load-once; terminal-only, 409 offers /live)
 /matches/{matchId}/live             follow-live per-move board over the SSE feed; hands off to replay when terminal
 /tournaments                        create form (ordered seeding pick) + all tournaments
 /tournaments/{tournamentId}         standings + schedule ledger (rows link to matches)
@@ -261,6 +294,18 @@ Configuration:
   escalates. `SubscribeMatchLiveAsync` folds only the documented 404 into
   `ArenaResult`; don't swallow a transport drop into that envelope, and don't
   demote a parse failure to the banner.
+- **The audit page prints, never correlates.** The audit packet's ordering
+  semantics (a clock event precedes the decision it timed; a cube-offer
+  clock event with no cube event was a declined double window; a trailing
+  clock event timed the fatal decision) are the producer's contract,
+  surfaced only as `AuditNarration.ClockCorrelationNote` — a static legend.
+  Do not add clock→decision joins or think-time aggregation app-side; if
+  aggregates are ever wanted they are a producer-side projection. Fair-dice
+  fields (commitment / algorithm / key) render verbatim; the independent
+  re-verify badge is explicitly declined (user ruling 2026-07-04).
+- **A clockless audit timeline is normal.** The flat regime measures no
+  per-decision timing, so no clock rows and no legend is the expected shape
+  — never render it as a warning or a gap.
 - **Razor markup namespaces come from `_Imports.razor`, not code-behind
   usings.** A component referenced only in markup (e.g. `BackgammonDiagram`)
   fails with RZ10012 unless its namespace is in `_Imports.razor` — the
@@ -295,8 +340,6 @@ Configuration:
   it (schema-reserved, empty today).
 - **Per-match decision-timeout field on the launch form** if/when the
   producer adds the per-match override (global-only today).
-- **Surface the summary time fields** — `TimeControl` (Fischer clock, or the
-  flat per-decision regime when null), `StartedAtUtc`, and `EndedAtUtc` now
-  ride `MatchSummary`/`TournamentSummary` but are not displayed. Wants a
-  dashboard "when" column and a clocked-match indicator; a UI feature arc, not
-  the Arc 9 consumer adaptation that first consumed the fields.
+- **Time-control field on the launch/create forms** — the requests carry an
+  optional `TimeControl` and the server honors it, but both forms always
+  send null today; clocked matches can only be started by API callers.

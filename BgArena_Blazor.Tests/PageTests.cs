@@ -128,7 +128,50 @@ public class PageTests : BunitContext
             Assert.Contains("Alpha vs Beta", cut.Markup);
             Assert.Contains("3–1", cut.Markup);
             Assert.Equal("matches/match-1/replay", cut.Find("#replay-link").GetAttribute("href"));
+
+            // The time fields ride the card: regime, start, end + duration.
+            Assert.Equal("flat per-decision timeout", cut.Find("#time-control").TextContent);
+            Assert.Equal("2026-07-05 12:00", cut.Find("#started-at").TextContent);
+            Assert.Equal("2026-07-05 12:30 · 30m 0s", cut.Find("#ended-at").TextContent);
         });
+    }
+
+    [Fact]
+    public void MatchDetail_ClockedMatch_SpellsOutTheFischerParameters()
+    {
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", CannedJson.ClockedCompletedMatch));
+
+        var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+            Assert.Equal("Fischer 120s + 8s/decision", cut.Find("#time-control").TextContent));
+    }
+
+    [Fact]
+    public void MatchDetail_ForfeitedMatch_ShowsTheStructuredCausePillBesideTheName()
+    {
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", CannedJson.ForfeitedMatch));
+
+        var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var pill = cut.Find("dd span.cause");
+            Assert.Contains("cause-flagfall", pill.GetAttribute("class"));
+            Assert.Equal("flag fall", pill.TextContent.Trim());
+            // Detail stays the human-readable companion on its own row.
+            Assert.Contains("ran out of time on a play query", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public void MatchDetail_RunningMatch_ShowsNoEndTimeYet()
+    {
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", CannedJson.RunningMatch));
+
+        var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() => Assert.Equal("—", cut.Find("#ended-at").TextContent));
     }
 
     // A terminal match — any of the five terminal statuses — offers the .MAT
@@ -149,7 +192,12 @@ public class PageTests : BunitContext
         var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
 
         cut.WaitForAssertion(() =>
-            Assert.Equal("matches/match-1/export.mat", cut.Find("#download-mat-link").GetAttribute("href")));
+        {
+            Assert.Equal("matches/match-1/export.mat", cut.Find("#download-mat-link").GetAttribute("href"));
+            // The audit timeline is served for every terminal status too — the
+            // link is the replay link's sibling.
+            Assert.Equal("matches/match-1/audit", cut.Find("#audit-link").GetAttribute("href"));
+        });
     }
 
     [Fact]
@@ -163,6 +211,7 @@ public class PageTests : BunitContext
         {
             Assert.Equal("matches/match-1/live", cut.Find("#watch-live-link").GetAttribute("href"));
             Assert.Empty(cut.FindAll("#replay-link"));
+            Assert.Empty(cut.FindAll("#audit-link"));
             Assert.Empty(cut.FindAll("#download-mat-link"));
         });
     }
@@ -186,13 +235,15 @@ public class PageTests : BunitContext
             Assert.Equal("matches/match-1/replay", cut.Find("#replay-link").GetAttribute("href"));
             Assert.Equal("matches/match-1/export.mat", cut.Find("#download-mat-link").GetAttribute("href"));
             Assert.Empty(cut.FindAll("#watch-live-link"));
+            // Terminal with no recorded end: the honest lost-end-time wording.
+            Assert.Equal("unknown — the end time died with the server", cut.Find("#ended-at").TextContent);
         });
     }
 
     /// <summary>A terminal match record with the given status; fields the
     /// affordance does not read are null (a running match is elsewhere).</summary>
     private static string TerminalMatchJson(string status) =>
-        $$"""{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"timeControl":null,"status":"{{status}}","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}""";
+        $$"""{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"timeControl":null,"status":"{{status}}","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"forfeitCause":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}""";
 
     [Fact]
     public void MatchDetail_UnknownId_RendersNotFound()
@@ -237,6 +288,29 @@ public class PageTests : BunitContext
         });
     }
 
+    [Fact]
+    public void TournamentsPage_ListingShowsWhenColumnAndClockIndicator()
+    {
+        // A clocked, completed tournament row: the when cell carries start +
+        // duration, and the length cell carries the clock indicator.
+        const string clockedTournament =
+            """[{"tournamentId":"tour-1","participants":["Alpha","Beta"],"matchLength":3,"matchesPerPairing":2,"seed":7,"timeControl":{"initialSeconds":120,"incrementSeconds":8},"status":"completed","winner":"Alpha","detail":null,"standings":[],"matches":[],"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":"2026-07-05T13:02:00+00:00"}]""";
+        UseHandler(new RoutedJsonHandler()
+            .Map("GET /engines", CannedJson.TwoIdleEngines)
+            .Map("GET /tournaments", clockedTournament));
+
+        var cut = Render<Tournaments>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll(".tournaments-table tbody tr"));
+            Assert.Equal("2026-07-05 12:00 · 1h 2m", row.QuerySelector("td.when-cell")!.TextContent.Trim());
+            var indicator = row.QuerySelector(".clock-indicator");
+            Assert.NotNull(indicator);
+            Assert.Equal("Fischer 120s + 8s/decision", indicator.GetAttribute("title"));
+        });
+    }
+
     // ---- Tournament detail ----------------------------------------------------
 
     [Fact]
@@ -254,6 +328,23 @@ public class PageTests : BunitContext
             var link = Assert.Single(ledgerRows[0].QuerySelectorAll("a"));
             Assert.Equal("matches/match-1", link.GetAttribute("href"));
             Assert.Contains("scheduled", ledgerRows[1].TextContent);
+        });
+    }
+
+    [Fact]
+    public void TournamentDetail_ShowsTheTimeFieldsOnTheCard()
+    {
+        // A running flat-regime tournament: the regime is worded as such, the
+        // start instant shows, and the end line is an em-dash while running.
+        UseHandler(new RoutedJsonHandler().Map("GET /tournaments/tour-1", CannedJson.RunningTournament));
+
+        var cut = Render<TournamentDetail>(p => p.Add(c => c.TournamentId, "tour-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("flat per-decision timeout", cut.Find("#time-control").TextContent);
+            Assert.Equal("2026-07-05 12:00", cut.Find("#started-at").TextContent);
+            Assert.Equal("—", cut.Find("#ended-at").TextContent);
         });
     }
 }

@@ -28,14 +28,14 @@ public class LiveMatchPageTests : BunitContext
     private static MatchSummary CompletedSummary() =>
         new("match-1", "Alpha", "Beta", MatchLength: 7, MaxGames: null, Seed: 42,
             TimeControl: null, MatchStatus.Completed, Winner: "Alpha", SeatOneScore: 7, SeatTwoScore: 3,
-            ForfeitedBy: null, Detail: null, StartedAtUtc: default, EndedAtUtc: null);
+            ForfeitedBy: null, ForfeitCause: null, Detail: null, StartedAtUtc: default, EndedAtUtc: null);
 
     /// <summary>An interrupted final record — a terminal status whose end time
     /// died with the server (endedAtUtc null), reconstructed from the journal.</summary>
     private static MatchSummary InterruptedSummary() =>
         new("match-1", "Alpha", "Beta", MatchLength: 7, MaxGames: null, Seed: 42,
             TimeControl: null, MatchStatus.Interrupted, Winner: null, SeatOneScore: null, SeatTwoScore: null,
-            ForfeitedBy: null,
+            ForfeitedBy: null, ForfeitCause: null,
             Detail: "The server was interrupted while this match was running; the record was reconstructed from its journal.",
             StartedAtUtc: default, EndedAtUtc: null);
 

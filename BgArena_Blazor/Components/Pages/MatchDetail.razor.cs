@@ -5,8 +5,9 @@ using Microsoft.AspNetCore.Components;
 namespace BgArena_Blazor.Components.Pages;
 
 /// <summary>
-/// One match record in full: engines, status, outcome, seed, forfeit info,
-/// and the replay link once the match is Completed. Polls while the match is
+/// One match record in full: engines, status, outcome, seed, time control,
+/// start/end instants, forfeit info — and the replay / audit / .MAT
+/// affordances once the record is terminal. Polls while the match is
 /// running and pauses once the record is terminal (or the id is unknown);
 /// navigating to a different id resets and resumes.
 /// </summary>

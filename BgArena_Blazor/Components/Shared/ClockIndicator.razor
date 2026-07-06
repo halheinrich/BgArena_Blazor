@@ -1,0 +1,7 @@
+@* The one clocked-match indicator: a clock glyph whose tooltip carries the
+   full Fischer parameters. Renders nothing for the flat regime (null) — the
+   tables show the glyph, the detail cards spell the parameters out. *@
+@if (TimeControl is not null)
+{
+    <span class="clock-indicator" title="@ArenaDisplay.TimeControlText(TimeControl)">⏱</span>
+}

@@ -12,11 +12,14 @@ public class SharedTableTests : BunitContext
 {
     private static MatchSummary Match(
         string id = "match-1", int matchLength = 7, int? maxGames = null,
+        TimeControl? timeControl = null,
         MatchStatus status = MatchStatus.Running, string? winner = null,
-        int? seatOneScore = null, int? seatTwoScore = null) =>
-        new(id, "Alpha", "Beta", matchLength, maxGames, Seed: 42, TimeControl: null, status, winner,
-            seatOneScore, seatTwoScore, ForfeitedBy: null, Detail: null,
-            StartedAtUtc: default, EndedAtUtc: null);
+        int? seatOneScore = null, int? seatTwoScore = null,
+        string? forfeitedBy = null, ForfeitCause? forfeitCause = null,
+        DateTimeOffset startedAtUtc = default, DateTimeOffset? endedAtUtc = null) =>
+        new(id, "Alpha", "Beta", matchLength, maxGames, Seed: 42, timeControl, status, winner,
+            seatOneScore, seatTwoScore, forfeitedBy, forfeitCause, Detail: null,
+            startedAtUtc, endedAtUtc);
 
     [Fact]
     public void MatchesTable_RendersARowPerMatchLinkingToDetail()
@@ -72,6 +75,58 @@ public class SharedTableTests : BunitContext
             [Match(matchLength: 0, maxGames: 50)]));
 
         Assert.Contains("money · 50 games", cut.Markup);
+    }
+
+    [Fact]
+    public void MatchesTable_WhenColumn_ShowsStartAndJoinsDurationOnceEnded()
+    {
+        var cut = Render<MatchesTable>(p => p.Add(c => c.Matches,
+        [
+            Match(id: "m-run", startedAtUtc: new DateTimeOffset(2026, 7, 5, 12, 0, 0, TimeSpan.Zero)),
+            Match(id: "m-done", status: MatchStatus.Completed, winner: "Alpha",
+                seatOneScore: 7, seatTwoScore: 3,
+                startedAtUtc: new DateTimeOffset(2026, 7, 5, 12, 0, 0, TimeSpan.Zero),
+                endedAtUtc: new DateTimeOffset(2026, 7, 5, 12, 30, 0, TimeSpan.Zero)),
+        ]));
+
+        var cells = cut.FindAll("td.when-cell");
+        Assert.Equal("2026-07-05 12:00", cells[0].TextContent.Trim());
+        Assert.Equal("2026-07-05 12:00 · 30m 0s", cells[1].TextContent.Trim());
+    }
+
+    [Fact]
+    public void MatchesTable_ClockedRowShowsTheIndicatorWithTheFischerParameters()
+    {
+        var cut = Render<MatchesTable>(p => p.Add(c => c.Matches,
+        [
+            Match(id: "m-clocked", timeControl: new TimeControl(120, 8)),
+            Match(id: "m-flat"),
+        ]));
+
+        var rows = cut.FindAll("tbody tr");
+        var indicator = rows[0].QuerySelector(".clock-indicator");
+        Assert.NotNull(indicator);
+        Assert.Equal("Fischer 120s + 8s/decision", indicator.GetAttribute("title"));
+        Assert.Null(rows[1].QuerySelector(".clock-indicator"));
+    }
+
+    [Fact]
+    public void MatchesTable_ForfeitedRowShowsTheStructuredCausePill()
+    {
+        var cut = Render<MatchesTable>(p => p.Add(c => c.Matches,
+        [
+            Match(id: "m-forfeit", status: MatchStatus.Forfeited, winner: "Beta",
+                forfeitedBy: "Alpha", forfeitCause: ForfeitCause.Disconnect),
+            Match(id: "m-done", status: MatchStatus.Completed, winner: "Alpha",
+                seatOneScore: 7, seatTwoScore: 3),
+        ]));
+
+        var rows = cut.FindAll("tbody tr");
+        var pill = rows[0].QuerySelector("span.cause");
+        Assert.NotNull(pill);
+        Assert.Contains("cause-disconnect", pill.GetAttribute("class"));
+        Assert.Equal("disconnect", pill.TextContent.Trim());
+        Assert.Null(rows[1].QuerySelector("span.cause"));
     }
 
     [Fact]

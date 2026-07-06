@@ -90,6 +90,7 @@ else
                 <th>Per pairing</th>
                 <th>Status</th>
                 <th>Winner</th>
+                <th>When (UTC)</th>
             </tr>
         </thead>
         <tbody>
@@ -98,10 +99,14 @@ else
                 <tr>
                     <td><a href="@($"tournaments/{tournament.TournamentId}")">@tournament.TournamentId</a></td>
                     <td>@string.Join(", ", tournament.Participants)</td>
-                    <td>@tournament.MatchLength points</td>
+                    <td>
+                        @tournament.MatchLength points
+                        <ClockIndicator TimeControl="tournament.TimeControl" />
+                    </td>
                     <td>@tournament.MatchesPerPairing</td>
                     <td><span class="@ArenaDisplay.StatusCss(tournament.Status)">@tournament.Status</span></td>
                     <td>@(tournament.Winner ?? "—")</td>
+                    <td class="when-cell">@ArenaDisplay.WhenText(tournament.StartedAtUtc, tournament.EndedAtUtc)</td>
                 </tr>
             }
         </tbody>

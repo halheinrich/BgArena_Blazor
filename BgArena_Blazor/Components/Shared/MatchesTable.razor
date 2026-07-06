@@ -13,6 +13,7 @@ else
                 <th>Status</th>
                 <th>Winner</th>
                 <th>Score</th>
+                <th>When (UTC)</th>
             </tr>
         </thead>
         <tbody>
@@ -21,9 +22,18 @@ else
                 <tr>
                     <td><a href="@($"matches/{match.MatchId}")">@match.MatchId</a></td>
                     <td>@match.EngineOne vs @match.EngineTwo</td>
-                    <td>@ArenaDisplay.LengthText(match.MatchLength, match.MaxGames)</td>
+                    <td>
+                        @ArenaDisplay.LengthText(match.MatchLength, match.MaxGames)
+                        <ClockIndicator TimeControl="match.TimeControl" />
+                    </td>
                     <td>
                         <span class="@ArenaDisplay.StatusCss(match.Status)">@match.Status</span>
+                        @* The structured forfeit cause rides beside the status pill;
+                           the prose detail stays on the detail card. *@
+                        @if (match.ForfeitCause is { } cause)
+                        {
+                            <span class="@ArenaDisplay.ForfeitCauseCss(cause)">@ArenaDisplay.ForfeitCauseText(cause)</span>
+                        }
                         @if (match.Status == MatchStatus.Running)
                         {
                             <a class="watch-live" href="@($"matches/{match.MatchId}/live")">watch</a>
@@ -31,6 +41,7 @@ else
                     </td>
                     <td>@(match.Winner ?? "—")</td>
                     <td>@ArenaDisplay.ScoreText(match)</td>
+                    <td class="when-cell">@ArenaDisplay.WhenText(match.StartedAtUtc, match.EndedAtUtc)</td>
                 </tr>
             }
         </tbody>
