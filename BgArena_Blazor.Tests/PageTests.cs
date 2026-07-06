@@ -131,14 +131,17 @@ public class PageTests : BunitContext
         });
     }
 
-    // A terminal match — any of the four terminal statuses — offers the .MAT
+    // A terminal match — any of the five terminal statuses — offers the .MAT
     // download beside the replay, pointing at this host's relay (not the
     // internal server). Mirrors how the watch-live link keys off Running.
+    // Interrupted (journal-rehydrated) is terminal too: the server serves both
+    // its replay and its .MAT.
     [Theory]
     [InlineData("completed")]
     [InlineData("forfeited")]
     [InlineData("aborted")]
     [InlineData("faulted")]
+    [InlineData("interrupted")]
     public void MatchDetail_TerminalMatch_OffersTheMatDownload(string status)
     {
         UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", TerminalMatchJson(status)));
@@ -164,10 +167,32 @@ public class PageTests : BunitContext
         });
     }
 
+    [Fact]
+    public void MatchDetail_InterruptedMatch_ShowsTheTerminalCardReplayAndDownload()
+    {
+        // An interrupted match (journal-rehydrated) is terminal: the detail page
+        // renders its status pill and reconstruction detail, offers replay and
+        // the .MAT download, and shows no watch-live affordance.
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1", CannedJson.InterruptedMatch));
+
+        var cut = Render<MatchDetail>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var pill = cut.Find("dd span.status");
+            Assert.Contains("status-interrupted", pill.GetAttribute("class"));
+            Assert.Contains("Interrupted", pill.TextContent);
+            Assert.Contains("reconstructed from its journal", cut.Markup);
+            Assert.Equal("matches/match-1/replay", cut.Find("#replay-link").GetAttribute("href"));
+            Assert.Equal("matches/match-1/export.mat", cut.Find("#download-mat-link").GetAttribute("href"));
+            Assert.Empty(cut.FindAll("#watch-live-link"));
+        });
+    }
+
     /// <summary>A terminal match record with the given status; fields the
     /// affordance does not read are null (a running match is elsewhere).</summary>
     private static string TerminalMatchJson(string status) =>
-        $$"""{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"status":"{{status}}","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null}""";
+        $$"""{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"timeControl":null,"status":"{{status}}","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}""";
 
     [Fact]
     public void MatchDetail_UnknownId_RendersNotFound()

@@ -15,6 +15,10 @@ namespace BgArena_Blazor.Tests;
 /// </summary>
 public class ArenaClientTests
 {
+    /// <summary>The producer golden's start/end instants (see ApiGoldenTests).</summary>
+    private static readonly DateTimeOffset StartedAt = new(2026, 7, 5, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset EndedAt = new(2026, 7, 5, 12, 30, 0, TimeSpan.Zero);
+
     /// <summary>Captures the last request and answers from a scripted responder.</summary>
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
     {
@@ -60,7 +64,7 @@ public class ArenaClientTests
     {
         // The completed-match golden row, verbatim from the producer's pins.
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK,
-            """[{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"status":"completed","winner":"Alpha","seatOneScore":3,"seatTwoScore":1,"forfeitedBy":null,"detail":null}]"""));
+            """[{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"timeControl":null,"status":"completed","winner":"Alpha","seatOneScore":3,"seatTwoScore":1,"forfeitedBy":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":"2026-07-05T12:30:00+00:00"}]"""));
 
         IReadOnlyList<MatchSummary> matches = await Client(handler).GetMatchesAsync();
 
@@ -68,8 +72,8 @@ public class ArenaClientTests
         Assert.Equal(MatchStatus.Completed, match.Status);
         Assert.Equal(
             new MatchSummary("match-1", "Alpha", "Beta", MatchLength: 3, MaxGames: null, Seed: 42,
-                MatchStatus.Completed, Winner: "Alpha", SeatOneScore: 3, SeatTwoScore: 1,
-                ForfeitedBy: null, Detail: null),
+                TimeControl: null, MatchStatus.Completed, Winner: "Alpha", SeatOneScore: 3, SeatTwoScore: 1,
+                ForfeitedBy: null, Detail: null, StartedAtUtc: StartedAt, EndedAtUtc: EndedAt),
             match);
     }
 
@@ -153,7 +157,7 @@ public class ArenaClientTests
     public async Task StartMatch_PostsTheGoldenRequestShapeAndReadsTheSummary()
     {
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK,
-            """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"maxGames":50,"seed":42,"status":"running","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null}"""));
+            """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"maxGames":50,"seed":42,"timeControl":null,"status":"running","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}"""));
 
         ArenaResult<MatchSummary> result = await Client(handler)
             .StartMatchAsync(new StartMatchRequest("Alpha", "Beta", MatchLength: 7, Seed: 42, MaxGames: 50));
@@ -184,7 +188,7 @@ public class ArenaClientTests
     public async Task StartTournament_PostsAndReadsTheSummary()
     {
         var handler = new StubHandler(_ => Json(HttpStatusCode.OK,
-            """{"tournamentId":"tour-1","participants":["Alpha","Beta"],"matchLength":3,"matchesPerPairing":2,"seed":7,"status":"running","winner":null,"detail":null,"standings":[{"rank":1,"participant":"Alpha","wins":0,"losses":0,"sonnebornBerger":0},{"rank":2,"participant":"Beta","wins":0,"losses":0,"sonnebornBerger":0}],"matches":[{"index":0,"seatOne":"Alpha","seatTwo":"Beta","seed":11,"matchId":null,"status":null,"winner":null}]}"""));
+            """{"tournamentId":"tour-1","participants":["Alpha","Beta"],"matchLength":3,"matchesPerPairing":2,"seed":7,"timeControl":null,"status":"running","winner":null,"detail":null,"standings":[{"rank":1,"participant":"Alpha","wins":0,"losses":0,"sonnebornBerger":0},{"rank":2,"participant":"Beta","wins":0,"losses":0,"sonnebornBerger":0}],"matches":[{"index":0,"seatOne":"Alpha","seatTwo":"Beta","seed":11,"matchId":null,"status":null,"winner":null}],"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}"""));
 
         ArenaResult<TournamentSummary> result = await Client(handler)
             .StartTournamentAsync(new StartTournamentRequest(["Alpha", "Beta"], MatchLength: 3, MatchesPerPairing: 2, Seed: 7));

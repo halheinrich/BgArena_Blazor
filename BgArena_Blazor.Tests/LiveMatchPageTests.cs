@@ -27,8 +27,17 @@ public class LiveMatchPageTests : BunitContext
     /// <summary>A completed final record, as the terminal event carries it.</summary>
     private static MatchSummary CompletedSummary() =>
         new("match-1", "Alpha", "Beta", MatchLength: 7, MaxGames: null, Seed: 42,
-            MatchStatus.Completed, Winner: "Alpha", SeatOneScore: 7, SeatTwoScore: 3,
-            ForfeitedBy: null, Detail: null);
+            TimeControl: null, MatchStatus.Completed, Winner: "Alpha", SeatOneScore: 7, SeatTwoScore: 3,
+            ForfeitedBy: null, Detail: null, StartedAtUtc: default, EndedAtUtc: null);
+
+    /// <summary>An interrupted final record — a terminal status whose end time
+    /// died with the server (endedAtUtc null), reconstructed from the journal.</summary>
+    private static MatchSummary InterruptedSummary() =>
+        new("match-1", "Alpha", "Beta", MatchLength: 7, MaxGames: null, Seed: 42,
+            TimeControl: null, MatchStatus.Interrupted, Winner: null, SeatOneScore: null, SeatTwoScore: null,
+            ForfeitedBy: null,
+            Detail: "The server was interrupted while this match was running; the record was reconstructed from its journal.",
+            StartedAtUtc: default, EndedAtUtc: null);
 
     /// <summary>Wraps events as an SSE body — one <c>data:</c> frame per event.</summary>
     private static string Sse(params LiveMatchEvent[] events) =>
@@ -120,6 +129,32 @@ public class LiveMatchPageTests : BunitContext
             Assert.Contains("7–3", cut.Find("#live-terminal").TextContent);
             Assert.Equal("matches/match-1/replay", cut.Find("#live-replay-link").GetAttribute("href"));
             // The live board gives way to the outcome card.
+            Assert.Empty(cut.FindAll("#live-scoreboard"));
+        });
+    }
+
+    [Fact]
+    public void InterruptedTerminal_ShowsTheOutcomeAndHandsOffToReplay()
+    {
+        // Joining an interrupted match (only ever rehydrated) yields the journal
+        // snapshot then the terminal event carrying the interrupted record: the
+        // page shows the outcome card — status pill and all — and the replay
+        // hand-off, exactly as for any other terminal outcome.
+        UseHandler(new RoutedJsonHandler()
+            .Map("GET /matches/match-1", CannedJson.InterruptedMatch)
+            .MapEventStream("GET /matches/match-1/live",
+                Sse(
+                    new LiveSnapshotEvent(1, 0, 0, IsCrawford: false, Entries: [OpeningPlay()]),
+                    new LiveTerminalEvent(InterruptedSummary()))));
+
+        var cut = RenderLive();
+
+        cut.WaitForAssertion(() =>
+        {
+            var terminal = cut.Find("#live-terminal");
+            Assert.Contains("Interrupted", terminal.TextContent);
+            Assert.Contains("status-interrupted", terminal.QuerySelector("span.status")!.GetAttribute("class"));
+            Assert.Equal("matches/match-1/replay", cut.Find("#live-replay-link").GetAttribute("href"));
             Assert.Empty(cut.FindAll("#live-scoreboard"));
         });
     }

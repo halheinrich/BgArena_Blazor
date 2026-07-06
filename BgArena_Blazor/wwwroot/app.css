@@ -118,7 +118,8 @@ html, body {
 
 .status-forfeited,
 .status-aborted,
-.status-faulted {
+.status-faulted,
+.status-interrupted {
     background: #fee2e2;
     color: #991b1b;
 }

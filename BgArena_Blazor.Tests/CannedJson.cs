@@ -17,11 +17,20 @@ internal static class CannedJson
 
     /// <summary>A single running match, as POST /matches answers.</summary>
     public const string RunningMatch =
-        """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"maxGames":null,"seed":42,"status":"running","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null}""";
+        """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":7,"maxGames":null,"seed":42,"timeControl":null,"status":"running","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}""";
 
     /// <summary>A completed match — the golden completed row.</summary>
     public const string CompletedMatch =
-        """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"status":"completed","winner":"Alpha","seatOneScore":3,"seatTwoScore":1,"forfeitedBy":null,"detail":null}""";
+        """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"timeControl":null,"status":"completed","winner":"Alpha","seatOneScore":3,"seatTwoScore":1,"forfeitedBy":null,"detail":null,"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":"2026-07-05T12:30:00+00:00"}""";
+
+    /// <summary>
+    /// An interrupted match — the rehydrated-orphan shape: a terminal status
+    /// with no end time (the true end died with the server), carrying the
+    /// producer's standard reconstruction detail. Only ever produced by journal
+    /// rehydration after a server restart.
+    /// </summary>
+    public const string InterruptedMatch =
+        """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":3,"maxGames":null,"seed":42,"timeControl":null,"status":"interrupted","winner":null,"seatOneScore":null,"seatTwoScore":null,"forfeitedBy":null,"detail":"The server was interrupted while this match was running; the record was reconstructed from its journal.","startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}""";
 
     /// <summary>
     /// The producer's whole-replay golden pin, verbatim: all three entry
@@ -33,5 +42,5 @@ internal static class CannedJson
 
     /// <summary>A running tournament with one resolved and one unreached ledger row.</summary>
     public const string RunningTournament =
-        """{"tournamentId":"tour-1","participants":["Alpha","Beta"],"matchLength":3,"matchesPerPairing":2,"seed":7,"status":"running","winner":null,"detail":null,"standings":[{"rank":1,"participant":"Alpha","wins":1,"losses":0,"sonnebornBerger":0},{"rank":2,"participant":"Beta","wins":0,"losses":1,"sonnebornBerger":0}],"matches":[{"index":0,"seatOne":"Alpha","seatTwo":"Beta","seed":11,"matchId":"match-1","status":"completed","winner":"Alpha"},{"index":1,"seatOne":"Beta","seatTwo":"Alpha","seed":12,"matchId":null,"status":null,"winner":null}]}""";
+        """{"tournamentId":"tour-1","participants":["Alpha","Beta"],"matchLength":3,"matchesPerPairing":2,"seed":7,"timeControl":null,"status":"running","winner":null,"detail":null,"standings":[{"rank":1,"participant":"Alpha","wins":1,"losses":0,"sonnebornBerger":0},{"rank":2,"participant":"Beta","wins":0,"losses":1,"sonnebornBerger":0}],"matches":[{"index":0,"seatOne":"Alpha","seatTwo":"Beta","seed":11,"matchId":"match-1","status":"completed","winner":"Alpha"},{"index":1,"seatOne":"Beta","seatTwo":"Alpha","seed":12,"matchId":null,"status":null,"winner":null}],"startedAtUtc":"2026-07-05T12:00:00+00:00","endedAtUtc":null}""";
 }

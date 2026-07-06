@@ -53,6 +53,26 @@ public class MatchReplayPageTests : BunitContext
     }
 
     [Fact]
+    public void InterruptedMatch_RendersThePartialityNoteFromTheServedStatus()
+    {
+        // An interrupted match (journal-rehydrated) serves the games that
+        // finished before the server died; the page signals the partiality from
+        // the response's terminal status, the same path as forfeited/aborted.
+        const string interruptedReplay =
+            """{"matchId":"match-1","engineOne":"Alpha","engineTwo":"Beta","matchLength":5,"status":"interrupted","games":[]}""";
+        UseHandler(new RoutedJsonHandler().Map("GET /matches/match-1/games", interruptedReplay));
+
+        var cut = Render<MatchReplay>(p => p.Add(c => c.MatchId, "match-1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            string note = cut.Find("#replay-partial").TextContent;
+            Assert.Contains("Interrupted", note);
+            Assert.Contains("0 completed games", note);
+        });
+    }
+
+    [Fact]
     public void KnownButNotCompleted_RendersTheServersReasonWithRetry()
     {
         UseHandler(new RoutedJsonHandler().Map(

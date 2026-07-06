@@ -14,8 +14,9 @@ public class SharedTableTests : BunitContext
         string id = "match-1", int matchLength = 7, int? maxGames = null,
         MatchStatus status = MatchStatus.Running, string? winner = null,
         int? seatOneScore = null, int? seatTwoScore = null) =>
-        new(id, "Alpha", "Beta", matchLength, maxGames, Seed: 42, status, winner,
-            seatOneScore, seatTwoScore, ForfeitedBy: null, Detail: null);
+        new(id, "Alpha", "Beta", matchLength, maxGames, Seed: 42, TimeControl: null, status, winner,
+            seatOneScore, seatTwoScore, ForfeitedBy: null, Detail: null,
+            StartedAtUtc: default, EndedAtUtc: null);
 
     [Fact]
     public void MatchesTable_RendersARowPerMatchLinkingToDetail()
@@ -47,6 +48,21 @@ public class SharedTableTests : BunitContext
         Assert.NotNull(watch);
         Assert.Equal("matches/m-run/live", watch.GetAttribute("href"));
         Assert.Null(rows[1].QuerySelector("a.watch-live"));
+    }
+
+    [Fact]
+    public void MatchesTable_InterruptedRow_ShowsTheStatusPillAndNoWatchLive()
+    {
+        // Interrupted is terminal (only ever produced by journal rehydration):
+        // it renders its status pill and offers no watch-live affordance.
+        var cut = Render<MatchesTable>(p => p.Add(c => c.Matches,
+            [Match(id: "m-int", status: MatchStatus.Interrupted)]));
+
+        var row = Assert.Single(cut.FindAll("tbody tr"));
+        var pill = row.QuerySelector("span.status")!;
+        Assert.Contains("status-interrupted", pill.GetAttribute("class"));
+        Assert.Contains("Interrupted", pill.TextContent);
+        Assert.Null(row.QuerySelector("a.watch-live"));
     }
 
     [Fact]

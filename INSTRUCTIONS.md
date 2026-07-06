@@ -295,3 +295,8 @@ Configuration:
   it (schema-reserved, empty today).
 - **Per-match decision-timeout field on the launch form** if/when the
   producer adds the per-match override (global-only today).
+- **Surface the summary time fields** — `TimeControl` (Fischer clock, or the
+  flat per-decision regime when null), `StartedAtUtc`, and `EndedAtUtc` now
+  ride `MatchSummary`/`TournamentSummary` but are not displayed. Wants a
+  dashboard "when" column and a clocked-match indicator; a UI feature arc, not
+  the Arc 9 consumer adaptation that first consumed the fields.
