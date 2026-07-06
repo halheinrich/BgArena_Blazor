@@ -343,3 +343,7 @@ Configuration:
 - **Time-control field on the launch/create forms** — the requests carry an
   optional `TimeControl` and the server honors it, but both forms always
   send null today; clocked matches can only be started by API callers.
+- **Forfeit-cause pill on the LiveMatch terminal panel** — the terminal
+  event's `MatchSummary` carries `ForfeitCause`, but the live page's outcome
+  panel shows only `ForfeitedBy`; render the pill there for parity with the
+  dashboard and detail card (`ArenaDisplay` already owns the wording/CSS).
