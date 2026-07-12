@@ -257,9 +257,31 @@ Configuration:
 - `Arena:BaseAddress` (required) — the tournament server's HTTP base address;
   startup throws without it. The server's dev default is
   `http://localhost:5251` (see BgTournament's launchSettings).
+- `Arena:ApiKey` (optional) — the admin API key this host presents on every
+  request, in the header `BgTournament.Api.AdminApiKey.HeaderName` owns.
+  Configured once on the typed client (Program.cs), so it covers polling,
+  replay, audit, the `.MAT` export relay, and the SSE live feed alike. Absent
+  ⇒ anonymous, byte-identical requests (today's dev default against a keyless
+  server). Present ⇒ every admin call is attributed to the key's actor name in
+  the server's durable record. A key set against a keyless server, or a wrong
+  key against an enforcing one, is refused with a named 401 (folded into
+  `ArenaResult`) — a config mismatch fails loudly rather than silently serving
+  unattributed. The value is a secret: it lives only on the client's default
+  headers, is never logged, and never reaches a rendered error.
 
 ## Pitfalls
 
+- **401 is the one surface-wide documented refusal.** BgTournament's identity
+  gate can answer 401 on any admin endpoint, so `ArenaClient` folds it into
+  `ArenaResult` everywhere an envelope is carried (`ArenaClient.AuthRefusal` is
+  the single home; `ToResultAsync`, `ExportMatchAsync`, and
+  `SubscribeMatchLiveAsync` each honor it) rather than listing it per method.
+  The listing calls (`GetEnginesAsync`/`GetMatchesAsync`/`GetTournamentsAsync`)
+  return plain lists with no envelope, so a 401 there still throws
+  `HttpRequestException` and the poll loop banners it as "unreachable" — the
+  known gap of the no-envelope shape, acceptable because a real deployment is
+  configured to match its server; don't paper over it by widening a listing's
+  return shape.
 - **The frame rule is fixed — never flip anything.** Every replay position is
   seat-One frame by producer contract; engineOne is always the diagram's
   positive/on-roll side. A seat-Two play therefore shows its dice on seat

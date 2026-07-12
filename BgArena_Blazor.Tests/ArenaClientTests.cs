@@ -324,6 +324,57 @@ public class ArenaClientTests
         Assert.Null(ledgerRow.MatchId);   // not reached yet — null until the tournament gets there
     }
 
+    // ---- auth refusal (surface-wide 401) -----------------------------------
+    //
+    // The admin surface's identity gate can answer 401 on any endpoint, so it is
+    // the one cross-cutting documented refusal — folded into ArenaResult on every
+    // path that carries an envelope, with the ErrorResponse reason. Pinned here
+    // deterministically for each of the three folding paths; the enforcing-server
+    // wire test proves it against the real gate.
+
+    private const string MissingKeyReason =
+        "This server requires an admin API key; send it in the X-Api-Key header.";
+
+    [Fact]
+    public async Task ByIdGet_Unauthorized_FoldsWithReason()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.Unauthorized,
+            $$"""{"error":"{{MissingKeyReason}}"}"""));
+
+        ArenaResult<MatchSummary> result = await Client(handler).GetMatchAsync("match-1");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        Assert.Equal(MissingKeyReason, result.Error);
+    }
+
+    [Fact]
+    public async Task ExportMatch_Unauthorized_FoldsWithReason()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.Unauthorized,
+            $$"""{"error":"{{MissingKeyReason}}"}"""));
+
+        ArenaResult<MatchExportFile> result = await Client(handler).ExportMatchAsync("match-1");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        Assert.Equal(MissingKeyReason, result.Error);
+    }
+
+    [Fact]
+    public async Task SubscribeMatchLive_Unauthorized_FoldsWithReason()
+    {
+        var handler = new StubHandler(_ => Json(HttpStatusCode.Unauthorized,
+            $$"""{"error":"{{MissingKeyReason}}"}"""));
+
+        ArenaResult<IAsyncEnumerable<LiveMatchEvent>> result =
+            await Client(handler).SubscribeMatchLiveAsync("match-1");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        Assert.Equal(MissingKeyReason, result.Error);
+    }
+
     // ---- undocumented statuses --------------------------------------------
 
     [Fact]

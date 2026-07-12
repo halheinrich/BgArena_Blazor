@@ -420,41 +420,6 @@ public class ArenaSmokeTests : BunitContext
         Assert.Contains($"match_{matchId}.mat", $"{disposition?.FileName} {disposition?.FileNameStar}");
     }
 
-    /// <summary>
-    /// A tournament-server factory that journals into an isolated per-instance
-    /// directory under the system temp area, deleted on dispose. Without it the
-    /// in-proc server takes its default <c>Persistence:DataDirectory</c> of
-    /// <c>data</c>, resolved against the server project's content root — so it
-    /// writes journals into <c>BgTournament.Server/data/</c> and rehydrates them
-    /// on the next boot, leaking terminal records across runs and across tests
-    /// (listing pollution the id-specific asserts here would otherwise miss).
-    /// Mirrors the producer's own ServerHarness isolation.
-    /// </summary>
-    private sealed class IsolatedTournamentServer : WebApplicationFactory<TournamentServer::Program>
-    {
-        private readonly string _dataDirectory =
-            Directory.CreateTempSubdirectory("bgarena-smoke-").FullName;
-
-        protected override void ConfigureWebHost(IWebHostBuilder builder) =>
-            builder.UseSetting("Persistence:DataDirectory", _dataDirectory);
-
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (disposing)
-            {
-                try
-                {
-                    Directory.Delete(_dataDirectory, recursive: true);
-                }
-                catch (DirectoryNotFoundException)
-                {
-                    // Never written to (e.g. a test that started no match): fine.
-                }
-            }
-        }
-    }
-
     private sealed class UnreachableException : Exception;
 
     /// <summary>

@@ -13,10 +13,25 @@ namespace BgArena_Blazor.Services;
 /// plain Web defaults with zero converter configuration (the producer
 /// contract — enum strings and polymorphic replay entries deserialize as-is).
 /// Contract-documented refusals surface as <see cref="ArenaResult{T}"/>;
-/// anything the contract does not document throws.
+/// anything the contract does not document throws. The admin surface's
+/// identity gate answers <see cref="AuthRefusal"/> on any endpoint when a
+/// required or invalid key is presented, so that status is the one
+/// cross-cutting documented refusal — folded on every call that carries an
+/// envelope, never thrown.
 /// </summary>
 public sealed class ArenaClient
 {
+    /// <summary>
+    /// The admin surface's cross-cutting refusal: BgTournament's identity gate
+    /// fronts every HTTP endpoint and answers 401 (with an
+    /// <see cref="ErrorResponse"/> reason that never echoes the key) when a
+    /// configured server is sent no key, or any server is sent an unrecognized
+    /// one. It is documented for the whole surface rather than per endpoint, so
+    /// it folds into <see cref="ArenaResult{T}"/> everywhere — an auth
+    /// misconfiguration surfaces as a clean refusal, not a raw transport throw.
+    /// </summary>
+    private const HttpStatusCode AuthRefusal = HttpStatusCode.Unauthorized;
+
     private readonly HttpClient _http;
 
     /// <summary>
@@ -143,6 +158,10 @@ public sealed class ArenaClient
         if (response.StatusCode == HttpStatusCode.NotFound)
             return ArenaResult<MatchExportFile>.Refused(HttpStatusCode.NotFound, error: null);
 
+        if (response.StatusCode == AuthRefusal)
+            return ArenaResult<MatchExportFile>.Refused(
+                AuthRefusal, await ReadRefusalReasonAsync(response, cancellationToken));
+
         if (response.StatusCode == HttpStatusCode.Conflict)
             return ArenaResult<MatchExportFile>.Refused(
                 HttpStatusCode.Conflict, await ReadRefusalReasonAsync(response, cancellationToken));
@@ -185,6 +204,13 @@ public sealed class ArenaClient
             return ArenaResult<IAsyncEnumerable<LiveMatchEvent>>.Refused(HttpStatusCode.NotFound, error: null);
         }
 
+        if (response.StatusCode == AuthRefusal)
+        {
+            string? reason = await ReadRefusalReasonAsync(response, cancellationToken);
+            response.Dispose();
+            return ArenaResult<IAsyncEnumerable<LiveMatchEvent>>.Refused(AuthRefusal, reason);
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             // Undocumented status: fail loud, and don't leak the response.
@@ -225,8 +251,9 @@ public sealed class ArenaClient
 
     /// <summary>
     /// Folds a response into an <see cref="ArenaResult{T}"/>: success
-    /// deserializes the payload; a documented refusal carries the status and
-    /// the <see cref="ErrorResponse"/> reason when a body is present; any
+    /// deserializes the payload; a documented refusal — the endpoint's own, or
+    /// the surface-wide <see cref="AuthRefusal"/> — carries the status and the
+    /// <see cref="ErrorResponse"/> reason when a body is present; any
     /// undocumented status throws <see cref="HttpRequestException"/>.
     /// </summary>
     private static async Task<ArenaResult<T>> ToResultAsync<T>(
@@ -241,7 +268,7 @@ public sealed class ArenaClient
             return ArenaResult<T>.Ok(payload);
         }
 
-        if (!documentedRefusals.Contains(response.StatusCode))
+        if (response.StatusCode != AuthRefusal && !documentedRefusals.Contains(response.StatusCode))
             response.EnsureSuccessStatusCode();
 
         return ArenaResult<T>.Refused(
