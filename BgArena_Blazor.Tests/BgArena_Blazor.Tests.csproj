@@ -9,6 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Direct reference so the security pin in Directory.Packages.props overrides
+         bunit's vulnerable transitive AngleSharp 1.4.0 (GHSA-pgww-w46g-26qg). -->
+    <PackageReference Include="AngleSharp" />
     <PackageReference Include="bunit" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
