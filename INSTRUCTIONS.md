@@ -369,3 +369,11 @@ Configuration:
   event's `MatchSummary` carries `ForfeitCause`, but the live page's outcome
   panel shows only `ForfeitedBy`; render the pill there for parity with the
   dashboard and detail card (`ArenaDisplay` already owns the wording/CSS).
+- **Widen the listing-call return shapes to the `ArenaResult` envelope** —
+  the listing calls (`GetEnginesAsync` / `GetMatchesAsync` /
+  `GetTournamentsAsync`) return plain lists with no envelope, so a 401 from
+  an enforcing server throws `HttpRequestException` and the poll loop banners
+  it as "unreachable", masking an auth misconfiguration as a transport
+  failure. The envelope paths fold the surface-wide 401 (Arc 12); widening
+  the listing shapes to match is the fix. Documented in Pitfalls; surfaced
+  (flagged-not-folded) by the Arc 12 consumer adaptation.
