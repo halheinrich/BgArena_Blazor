@@ -28,3 +28,6 @@ TestResults/
 ## Tooling
 .idea/
 *.DotSettings.user
+
+# Claude Code session state
+.claude/
