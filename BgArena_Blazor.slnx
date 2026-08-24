@@ -1,6 +1,15 @@
 <Solution>
+  <Project Path="../BackgammonDiagram_Lib/BackgammonDiagram_Lib/BackgammonDiagram_Lib.csproj" />
+  <Project Path="../BgDataTypes_Lib/BgDataTypes_Lib/BgDataTypes_Lib.csproj" />
   <Project Path="../BgDiag_Razor/BgDiag_Razor/BgDiag_Razor.csproj" />
+  <Project Path="../BgGame_Lib/BgGame_Lib/BgGame_Lib.csproj" />
+  <Project Path="../BgMatchFormat_Lib/BgMatchFormat_Lib/BgMatchFormat_Lib.csproj" />
+  <Project Path="../BgMoveGen/BgMoveGen/BgMoveGen.csproj" />
   <Project Path="../BgTournament/BgTournament.Api/BgTournament.Api.csproj" />
+  <Project Path="../BgTournament/BgTournament.Core/BgTournament.Core.csproj" />
+  <Project Path="../BgTournament/BgTournament.EngineClient/BgTournament.EngineClient.csproj" />
+  <Project Path="../BgTournament/BgTournament.Protocol/BgTournament.Protocol.csproj" />
+  <Project Path="../BgTournament/BgTournament.Server/BgTournament.Server.csproj" />
   <Project Path="BgArena_Blazor.Tests/BgArena_Blazor.Tests.csproj" />
   <Project Path="BgArena_Blazor/BgArena_Blazor.csproj" />
 </Solution>
