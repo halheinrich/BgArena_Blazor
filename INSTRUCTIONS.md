@@ -41,64 +41,50 @@ Test-only (never referenced by the app):
   (`EngineClient.ServeAsync` over TestServer WebSockets, `RandomPlayAgent`,
   `PassiveCubeAgent`).
 
-## Directory tree
+## Layout
 
-```
-BgArena_Blazor.slnx
-Directory.Build.props                   warnings-as-errors + XML docs repo-wide
-Directory.Packages.props                CPM — inline Version= is banned
-INSTRUCTIONS.md
-BgArena_Blazor/
-├── BgArena_Blazor.csproj
-├── Program.cs                          Razor components + the one typed-client registration
-├── appsettings.json                    Arena:BaseAddress (required)
-├── Properties/launchSettings.json
-├── Services/
-│   ├── ArenaClient.cs                  typed HTTP client — admin endpoints + the live SSE subscription
-│   ├── ArenaResult.cs                  Ok | Refused(status, reason) envelope
-│   ├── DiagramContext.cs               source-agnostic board context (replay + live share it)
-│   └── ReplayDiagramMapper.cs          position → DiagramRequest glue, over DiagramContext
-├── Components/
-│   ├── App.razor / Routes.razor / _Imports.razor
-│   ├── Layout/                         MainLayout + NavMenu (Engines · Matches · Tournaments)
-│   ├── Pages/
-│   │   ├── Engines.razor(.cs)          "/" — connected engines, polling
-│   │   ├── Matches.razor(.cs)          "/matches" — launch form + newest-first listing
-│   │   ├── MatchDetail.razor(.cs)      "/matches/{MatchId}" — record card; polls while Running
-│   │   ├── MatchReplay.razor(.cs)      "/matches/{MatchId}/replay" — load-once (partial for non-completed)
-│   │   ├── MatchAudit.razor(.cs)       "/matches/{MatchId}/audit" — load-once arbitration timeline (terminal-only)
-│   │   ├── LiveMatch.razor(.cs)        "/matches/{MatchId}/live" — follow-live board over the SSE feed
-│   │   ├── Tournaments.razor(.cs)      "/tournaments" — create form + listing
-│   │   └── TournamentDetail.razor(.cs) "/tournaments/{TournamentId}" — standings + ledger
-│   └── Shared/
-│       ├── PollingComponentBase.cs     the one polling implementation
-│       ├── ConnectionBanner.razor      the unreachable-server banner
-│       ├── ArenaDisplay.cs             status-CSS / length / score / match-kind / time-and-duration /
-│       │                               time-control / forfeit-cause wording (SSOT)
-│       ├── MatchesTable.razor(.cs)     the one MatchSummary row renderer
-│       ├── ClockIndicator.razor(.cs)   the one clocked-match table indicator (null = flat regime, nothing)
-│       ├── StandingsTable.razor(.cs)
-│       ├── TournamentLedger.razor(.cs)
-│       ├── ReplayNarration.cs          per-entry caption wording (replay + live SSOT)
-│       ├── AuditNarration.cs           audit-timeline wording SSOT (kind / caption / replay join / legend)
-│       ├── ReplayViewer.razor(.cs)     game picker + entry stepper + captions + board
-│       └── ReplayBoard.razor(.cs)      the one sized container over BackgammonDiagram
-└── wwwroot/app.css
-BgArena_Blazor.Tests/
-├── BgArena_Blazor.Tests.csproj
-├── ArenaClientTests.cs                 client over canned golden JSON (transport-layer stub)
-├── ReplayDiagramMapperTests.cs         frame rule, dice/IsCube split, money sentinel
-├── RoutedJsonHandler.cs                per-route stub transport for page tests
-├── CannedJson.cs                       shared golden-shaped fixtures (convenience, see Pitfalls)
-├── SharedTableTests.cs                 bUnit: tables, links, money wording
-├── PageTests.cs                        bUnit: dashboards, forms, refusals, banners
-├── ArenaDisplayTests.cs                unit: timestamp/duration/time-control/cause formatting boundaries
-├── ReplayViewerTests.cs                bUnit: stepping, captions, undrawable-position path
-├── MatchReplayPageTests.cs             bUnit: page outcomes (golden / partial / 409 / 404)
-├── MatchAuditPageTests.cs              bUnit: timeline rows, narration, clockless shape, refusals
-├── LiveMatchPageTests.cs               bUnit: live page over an SSE stub (snapshot/entry/terminal/drop)
-└── ArenaSmokeTests.cs                  THE gating smoke — real server, real wire, no stubs
-```
+Two projects under `BgArena_Blazor.slnx`, governed by repo-root
+`Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
+and `Directory.Packages.props` (Central Package Management — no inline
+`Version=`).
+
+**`BgArena_Blazor/`** — the Blazor Web App (Interactive Server). Four areas:
+
+- **Host** — `Program.cs`: the Razor components, the one typed-client
+  registration (its base address from the required `Arena:BaseAddress`, and
+  the admin key header when `Arena:ApiKey` is set), and the `.mat` export
+  relay endpoint; `appsettings.json` and its Development overlay.
+- **Services** — `Services/`: `ArenaClient`, the typed HTTP client that is
+  the app's only route to the server (admin endpoints, the live SSE
+  subscription, the match export); `ArenaResult`, the ok-or-documented-refusal
+  envelope; `MatchExportFile`, an export's bytes as served;
+  `DiagramContext` and `ReplayDiagramMapper`, the source-agnostic board
+  context and the position → `DiagramRequest` mapping the replay and live
+  views share.
+- **Pages** — `Components/Pages/`, one per route: engines (`/`, polling),
+  the match list and launch form, match detail, replay, audit timeline and
+  live board, the tournament list and create form, tournament detail; and
+  `Error`. `Components/Layout/` holds `MainLayout` and `NavMenu`;
+  `App.razor` and `Routes.razor` are the shell.
+- **Shared** — `Components/Shared/`: `PollingComponentBase`, the one
+  polling implementation; `ConnectionBanner`, the unreachable-server
+  banner; the one-renderer tables and indicators (`MatchesTable`,
+  `StandingsTable`, `TournamentLedger`, `ClockIndicator`); the replay
+  surface (`ReplayViewer`, and `ReplayBoard`, the one sized container over
+  `BackgammonDiagram`); and the wording homes — `ArenaDisplay`,
+  `ReplayNarration`, `AuditNarration`.
+
+`wwwroot/app.css` is the app's stylesheet.
+
+**`BgArena_Blazor.Tests/`** — xUnit, bUnit and
+`Microsoft.AspNetCore.Mvc.Testing`. Areas: the client over canned golden
+JSON and its admin-key attachment; the mapper and the display wording;
+bUnit page and shared-component tests over `RoutedJsonHandler`, the
+per-route stub transport, with `CannedJson`'s golden-shaped fixtures; the
+host's `.mat` relay against a scripted upstream; and `ArenaSmokeTests`,
+the gating smoke against the real tournament server in-process, the real
+wire and reference engines, no stubs. `IsolatedTournamentServer` gives each
+in-process tournament server a throwaway journal directory.
 
 ## Architecture
 
