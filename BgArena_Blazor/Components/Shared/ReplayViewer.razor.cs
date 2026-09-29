@@ -11,8 +11,8 @@ namespace BgArena_Blazor.Components.Shared;
 /// <c>finalState</c>, an actor-and-action caption per step, and the board.
 /// The viewer only walks served positions — moves are printed verbatim in
 /// the actor's own notation and never applied to a board app-side. A
-/// position the diagram cannot draw (Builder validation) renders a visible
-/// error in place of the board while stepping stays available.
+/// position the diagram cannot draw (its board or dice refused) renders a
+/// visible error in place of the board while stepping stays available.
 /// </summary>
 public partial class ReplayViewer
 {
@@ -107,11 +107,11 @@ public partial class ReplayViewer
                 : ReplayDiagramMapper.ForFinalState(context, game.FinalState);
             MappingError = null;
         }
-        catch (InvalidOperationException exception)
+        catch (ArgumentException exception)
         {
-            // Builder validation refused the position — e.g. a cube beyond
-            // the renderer's 4096 cap, which the producer does not cap. Fail
-            // visible instead of clamping or crashing; stepping stays alive.
+            // The served position cannot be drawn — a board that breaks
+            // BoardPosition's invariant, or a die outside 1–6. Fail visible
+            // instead of massaging or crashing; stepping stays alive.
             CurrentRequest = null;
             MappingError = exception.Message;
         }

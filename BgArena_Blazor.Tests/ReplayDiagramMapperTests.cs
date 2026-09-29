@@ -1,18 +1,24 @@
 using BackgammonDiagram_Lib;
 using BgArena_Blazor.Services;
 using BgTournament.Api;
+using ApiCubeOwner = BgTournament.Api.CubeOwner;
+using BoardPosition = BgDataTypes_Lib.BoardPosition;
 using DiagramCubeOwner = BgDataTypes_Lib.CubeOwner;
 
 namespace BgArena_Blazor.Tests;
 
 /// <summary>
-/// Pins the position → DiagramRequest glue over a <see cref="DiagramContext"/>:
-/// the fixed seat-One frame (engineOne is always the diagram's positive/on-roll
-/// side — nothing flips app-side), the play-vs-cube dice split the Builder
-/// validates, the seat-keyed → diagram cube-owner mapping, Crawford flow-through,
-/// and the money-session sentinel (MatchLength 0 must build — the needs fields
-/// stay 0, never negative). The context is source-agnostic, so these pins hold
-/// identically for the settled replay and the live feed.
+/// Pins the position → board request glue over a <see cref="DiagramContext"/>.
+/// Every arena board is a <see cref="DiagramRequest.ForBoard"/> request — a
+/// served <see cref="BoardPosition"/> and <see cref="DisplayFacts"/>, never a
+/// decision — in the fixed seat-One frame (engineOne is always the diagram's
+/// positive/on-roll side; nothing flips app-side). A play entry shows its
+/// dice; a cube entry and the final state show none, and no board states a
+/// title or any other decision-domain text. The facts stated are the API's:
+/// a match board's away scores and the game's Crawford flag, a money board's
+/// label with no Jacoby rule (the API states none). The context is
+/// source-agnostic, so these pins hold identically for the settled replay and
+/// the live feed.
 /// </summary>
 public class ReplayDiagramMapperTests
 {
@@ -20,41 +26,49 @@ public class ReplayDiagramMapperTests
     private static readonly int[] OpeningBoard =
         [0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2, 0];
 
-    private static GamePosition Position(int cubeValue = 1, CubeOwner cubeOwner = CubeOwner.Centered) =>
+    private static GamePosition Position(int cubeValue = 1, ApiCubeOwner cubeOwner = ApiCubeOwner.Centered) =>
         new(OpeningBoard, cubeValue, cubeOwner);
 
     private static DiagramContext Context(
         int matchLength = 7, int seatOneScore = 0, int seatTwoScore = 0, bool isCrawford = false) =>
         new("Alpha", "Beta", matchLength, seatOneScore, seatTwoScore, isCrawford);
 
+    /// <summary>The facts every board of a 7-point game at 0–0 states, before its own dice and cube.</summary>
+    private static DisplayFacts SevenPointFacts() => new()
+    {
+        OnRollName = "Alpha",
+        OpponentName = "Beta",
+        Score = new MatchRailScore(onRollNeeds: 7, opponentNeeds: 7, isCrawford: false),
+    };
+
     [Fact]
-    public void PlayEntry_MapsToCheckerDiagramCarryingItsDice()
+    public void PlayEntry_IsABoardRequestShowingItsDiceInServedOrder()
     {
         var entry = new PlayEntry(Seat.Two, Position(), Die1: 3, Die2: 1,
             Moves: [new PlayMove(8, 5), new PlayMove(6, 5)]);
 
-        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(matchLength: 7, 2, 5), entry);
+        DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
-        Assert.False(request.Decision.IsCube);
-        Assert.Equal([3, 1], request.Decision.Dice);
-        Assert.Equal(OpeningBoard, request.Position.Mop);
+        Assert.Null(request.Decision);
+        Assert.Equal(new BoardPosition(OpeningBoard), request.Board);
         Assert.Equal(DiagramMode.Problem, request.Mode);
+        Assert.Equal(SevenPointFacts() with { Dice = new DiceFaces(3, 1) }, request.Display);
     }
 
     [Fact]
     public void PlayEntry_AnchorsEngineOneAsTheOnRollSideRegardlessOfActor()
     {
         // The actor is seat Two, but the frame rule is fixed: engineOne is the
-        // diagram's on-roll side for every position of the whole match.
+        // diagram's on-roll side, and its away score the on-roll side's, for
+        // every position of the whole match.
         var entry = new PlayEntry(Seat.Two, Position(), Die1: 6, Die2: 2, Moves: []);
 
         DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(matchLength: 7, 2, 5), entry);
 
-        Assert.Equal("Alpha", request.Descriptive.OnRollName);
-        Assert.Equal("Beta", request.Descriptive.OpponentName);
-        Assert.Equal(7, request.Descriptive.MatchLength);
-        Assert.Equal(5, request.Position.OnRollNeeds);      // 7 − 2, seat One
-        Assert.Equal(2, request.Position.OpponentNeeds);    // 7 − 5, seat Two
+        DisplayFacts facts = request.Display!;
+        Assert.Equal("Alpha", facts.OnRollName);
+        Assert.Equal("Beta", facts.OpponentName);
+        Assert.Equal(new MatchRailScore(onRollNeeds: 5, opponentNeeds: 2, isCrawford: false), facts.Score);
     }
 
     [Fact]
@@ -64,81 +78,111 @@ public class ReplayDiagramMapperTests
 
         DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
-        Assert.False(request.Decision.IsCube);
-        Assert.Equal([5, 5], request.Decision.Dice);
+        Assert.Equal(new DiceFaces(5, 5), request.Display!.Dice);
     }
 
     [Fact]
-    public void CubeOfferEntry_MapsToCubeDiagramWithoutDice()
+    public void CubeOfferEntry_IsABoardWithNoDiceAndNothingOfADecision()
     {
-        var entry = new CubeOfferEntry(Seat.Two, Position(cubeValue: 2, CubeOwner.SeatTwo));
+        var entry = new CubeOfferEntry(Seat.Two, Position(cubeValue: 2, ApiCubeOwner.SeatTwo));
 
         DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
-        Assert.True(request.Decision.IsCube);
-        Assert.Equal([0, 0], request.Decision.Dice);
-        Assert.Equal(2, request.Position.CubeSize);
+        // Whole-facts equality: no dice and no title — nothing is stated to
+        // stand in for the decision-only "Cube Action?".
+        Assert.Null(request.Decision);
+        Assert.Equal(
+            SevenPointFacts() with { CubeValue = 2, CubeOwner = DiagramCubeOwner.Opponent },
+            request.Display);
     }
 
     [Fact]
-    public void CubeResponseEntry_MapsToCubeDiagramWithoutDice()
+    public void CubeResponseEntry_IsABoardWithNoDiceAndNothingOfADecision()
     {
         var entry = new CubeResponseEntry(Seat.One, Position(), CubeResponseAction.Take);
 
         DiagramRequest request = ReplayDiagramMapper.ForEntry(Context(), entry);
 
-        Assert.True(request.Decision.IsCube);
-        Assert.Equal([0, 0], request.Decision.Dice);
+        Assert.Null(request.Decision);
+        Assert.Equal(SevenPointFacts(), request.Display);
     }
 
     [Fact]
-    public void FinalState_MapsTheGameEndPositionWithoutDice()
+    public void FinalState_IsABoardWithNoDiceAndNothingOfADecision()
     {
         DiagramRequest request = ReplayDiagramMapper.ForFinalState(
-            Context(), Position(cubeValue: 4, CubeOwner.SeatOne));
+            Context(), Position(cubeValue: 4, ApiCubeOwner.SeatOne));
 
-        Assert.True(request.Decision.IsCube);
-        Assert.Equal(4, request.Position.CubeSize);
-        Assert.Equal(DiagramCubeOwner.OnRoll, request.Position.CubeOwner);
+        Assert.Null(request.Decision);
+        Assert.Equal(
+            SevenPointFacts() with { CubeValue = 4, CubeOwner = DiagramCubeOwner.OnRoll },
+            request.Display);
+    }
+
+    [Fact]
+    public void FinalState_DrawsATerminalBoard()
+    {
+        // A game's final position has a side borne off — no decision position,
+        // but a well-formed board, which is all ForBoard asks.
+        int[] seatOneBorneOff = new int[26];
+        seatOneBorneOff[6] = -15;
+
+        DiagramRequest request = ReplayDiagramMapper.ForFinalState(
+            Context(), new GamePosition(seatOneBorneOff, 1, ApiCubeOwner.Centered));
+
+        Assert.Equal(15, request.Board.OnRollBorneOffCount);
     }
 
     [Theory]
-    [InlineData(CubeOwner.Centered, DiagramCubeOwner.Centered)]
-    [InlineData(CubeOwner.SeatOne, DiagramCubeOwner.OnRoll)]     // seat One = the positive side
-    [InlineData(CubeOwner.SeatTwo, DiagramCubeOwner.Opponent)]
-    public void CubeOwner_MapsSeatKeyedOntoTheFixedFrame(CubeOwner apiOwner, DiagramCubeOwner expected)
+    [InlineData(ApiCubeOwner.Centered, DiagramCubeOwner.Centered)]
+    [InlineData(ApiCubeOwner.SeatOne, DiagramCubeOwner.OnRoll)]     // seat One = the positive side
+    [InlineData(ApiCubeOwner.SeatTwo, DiagramCubeOwner.Opponent)]
+    public void CubeOwner_MapsSeatKeyedOntoTheFixedFrame(ApiCubeOwner apiOwner, DiagramCubeOwner expected)
     {
         DiagramRequest request = ReplayDiagramMapper.ForFinalState(
             Context(), Position(cubeValue: 2, apiOwner));
 
-        Assert.Equal(expected, request.Position.CubeOwner);
+        Assert.Equal(expected, request.Display!.CubeOwner);
     }
 
-    [Fact]
-    public void Crawford_FlowsThrough()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MatchBoard_StatesTheGamesCrawfordFlagAsServed(bool isCrawford)
     {
         var entry = new PlayEntry(Seat.One, Position(), Die1: 2, Die2: 1, Moves: []);
 
         DiagramRequest request = ReplayDiagramMapper.ForEntry(
-            Context(matchLength: 7, seatOneScore: 6, seatTwoScore: 3, isCrawford: true), entry);
+            Context(matchLength: 7, seatOneScore: 6, seatTwoScore: 3, isCrawford), entry);
 
-        Assert.True(request.Position.IsCrawford);
+        Assert.Equal(new MatchRailScore(onRollNeeds: 1, opponentNeeds: 4, isCrawford), request.Display!.Score);
     }
 
     [Fact]
-    public void MoneySession_BuildsWithTheMoneySentinelAndNoNegativeNeeds()
+    public void MoneySession_StatesTheMoneyLabelWithNoJacobyRule()
     {
-        // MatchLength 0 is a legitimate producer payload (money session, games
-        // cap). The mapper must build — the diagram keys money rendering off
-        // MatchLength == 0 and never reads the needs fields on that path.
+        // The API's match length 0 is a money session, and the API states no
+        // Jacoby rule, so the board states none: MoneyRailScore(null), never a
+        // guessed true or false, and no away scores.
         var entry = new PlayEntry(Seat.One, Position(), Die1: 4, Die2: 2, Moves: []);
 
         DiagramRequest request = ReplayDiagramMapper.ForEntry(
             Context(matchLength: 0, seatOneScore: 5, seatTwoScore: 3), entry);
 
-        Assert.Equal(0, request.Descriptive.MatchLength);
-        Assert.Equal(0, request.Position.OnRollNeeds);
-        Assert.Equal(0, request.Position.OpponentNeeds);
+        Assert.Equal(new MoneyRailScore(isJacoby: null), request.Display!.Score);
+    }
+
+    [Fact]
+    public void MalformedBoard_IsRefusedAsAnArgumentException()
+    {
+        // The viewers' fail-visible boundary catches ArgumentException: a
+        // served board that breaks BoardPosition's invariant (here, sixteen
+        // checkers of seat One's) is refused with one.
+        int[] sixteenCheckers = [.. OpeningBoard];
+        sixteenCheckers[6] = 6;
+
+        Assert.ThrowsAny<ArgumentException>(() => ReplayDiagramMapper.ForFinalState(
+            Context(), new GamePosition(sixteenCheckers, 1, ApiCubeOwner.Centered)));
     }
 
     [Fact]
@@ -155,24 +199,5 @@ public class ReplayDiagramMapperTests
         DiagramContext context = DiagramContext.ForGame(match, game);
 
         Assert.Equal(new DiagramContext("Alpha", "Beta", 7, 6, 3, true), context);
-    }
-
-    [Fact]
-    public void EveryEntryKindOfOneGame_SurvivesBuilderValidation()
-    {
-        // The golden-shaped game: play, offer, response, final state — every
-        // renderable step of a game must pass DiagramRequest.Builder.Build().
-        var entries = new GameEntry[]
-        {
-            new PlayEntry(Seat.One, Position(), Die1: 3, Die2: 1,
-                Moves: [new PlayMove(8, 5), new PlayMove(6, 5)]),
-            new CubeOfferEntry(Seat.Two, Position()),
-            new CubeResponseEntry(Seat.One, Position(), CubeResponseAction.Take),
-        };
-        DiagramContext context = Context(matchLength: 3);
-
-        foreach (GameEntry entry in entries)
-            Assert.NotNull(ReplayDiagramMapper.ForEntry(context, entry));
-        Assert.NotNull(ReplayDiagramMapper.ForFinalState(context, Position(cubeValue: 2, CubeOwner.SeatOne)));
     }
 }

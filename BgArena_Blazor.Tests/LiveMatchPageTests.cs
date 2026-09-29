@@ -11,8 +11,10 @@ namespace BgArena_Blazor.Tests;
 /// stub: the match summary loads for context, then the SSE feed drives the
 /// board through the page's real mapping path. Covers the join-in-progress
 /// snapshot, a between-games (game-started) placeholder — including the
-/// Crawford flag now carried on the feed — the terminal hand-off to replay,
-/// and the two failure surfaces (unknown id, unreachable server).
+/// Crawford flag now carried on the feed — what the live board states (the
+/// feed's Crawford flag, no decision-domain text on a cube entry, the money
+/// label with no Jacoby rule), the terminal hand-off to replay, and the two
+/// failure surfaces (unknown id, unreachable server).
 /// </summary>
 public class LiveMatchPageTests : BunitContext
 {
@@ -49,6 +51,10 @@ public class LiveMatchPageTests : BunitContext
 
     private IRenderedComponent<LiveMatch> RenderLive() =>
         Render<LiveMatch>(p => p.Add(c => c.MatchId, "match-1"));
+
+    /// <summary>Every text the drawn board's SVG shows, in document order.</summary>
+    private static IReadOnlyList<string> BoardTexts(IRenderedComponent<LiveMatch> cut) =>
+        [.. cut.FindAll(".replay-board text").Select(text => text.TextContent)];
 
     [Fact]
     public void Snapshot_RendersScoreboardCaptionAndBoard()
@@ -107,6 +113,72 @@ public class LiveMatchPageTests : BunitContext
             Assert.NotNull(cut.Find("#live-placeholder"));
             Assert.Empty(cut.FindAll(".replay-board"));
             Assert.Contains("Game 2 (Crawford)", cut.Find("#live-caption").TextContent);
+        });
+    }
+
+    [Fact]
+    public void CrawfordGame_DrawsTheFeedsFlagOnTheLiveBoard()
+    {
+        // The live board states the Crawford flag the feed carries, drawn by
+        // the diagram on the rails and the cube.
+        UseHandler(new RoutedJsonHandler()
+            .Map("GET /matches/match-1", CannedJson.RunningMatch)
+            .MapEventStream("GET /matches/match-1/live",
+                Sse(new LiveSnapshotEvent(GameNumber: 7, SeatOneScore: 6, SeatTwoScore: 3,
+                    IsCrawford: true, Entries: [OpeningPlay()]))));
+
+        var cut = RenderLive();
+
+        cut.WaitForAssertion(() =>
+        {
+            IReadOnlyList<string> texts = BoardTexts(cut);
+            Assert.Contains("Alpha needs 1 Crawford", texts);
+            Assert.Contains("Beta needs 4 Crawford", texts);
+            Assert.Contains("Cr", texts);
+        });
+    }
+
+    [Fact]
+    public void CubeEntry_DrawsNoDecisionText()
+    {
+        // A cube offer followed live is a board, never a decision: no
+        // "Cube Action?" and no roll.
+        UseHandler(new RoutedJsonHandler()
+            .Map("GET /matches/match-1", CannedJson.RunningMatch)
+            .MapEventStream("GET /matches/match-1/live",
+                Sse(
+                    new LiveSnapshotEvent(1, 0, 0, IsCrawford: false, Entries: [OpeningPlay()]),
+                    new LiveEntryEvent(new CubeOfferEntry(Seat.Two, Pos())))));
+
+        var cut = RenderLive();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("Beta doubles to 2", cut.Find("#live-caption").TextContent);
+            IReadOnlyList<string> texts = BoardTexts(cut);
+            Assert.Contains("Alpha needs 7", texts);
+            Assert.DoesNotContain("Cube Action?", texts);
+            Assert.DoesNotContain(texts, text => text.Contains("to play", StringComparison.Ordinal));
+        });
+    }
+
+    [Fact]
+    public void MoneySession_DrawsTheMoneyLabelWithNoJacobyRule()
+    {
+        // The API states no Jacoby rule, so the live board states none.
+        UseHandler(new RoutedJsonHandler()
+            .Map("GET /matches/match-1", CannedJson.RunningMoneySession)
+            .MapEventStream("GET /matches/match-1/live",
+                Sse(new LiveSnapshotEvent(1, 0, 0, IsCrawford: false, Entries: [OpeningPlay()]))));
+
+        var cut = RenderLive();
+
+        cut.WaitForAssertion(() =>
+        {
+            IReadOnlyList<string> texts = BoardTexts(cut);
+            Assert.Contains("Alpha (Money Game)", texts);
+            Assert.Contains("Beta (Money Game)", texts);
+            Assert.DoesNotContain(texts, text => text.Contains("Jacoby", StringComparison.Ordinal));
         });
     }
 

@@ -216,10 +216,11 @@ public partial class LiveMatch : IAsyncDisposable
             CurrentRequest = ReplayDiagramMapper.ForEntry(context, entry);
             MappingError = null;
         }
-        catch (InvalidOperationException exception)
+        catch (ArgumentException exception)
         {
-            // The diagram refused the position (e.g. a cube beyond its 4096 cap,
-            // which the producer does not cap): fail visible, don't crash.
+            // The served position cannot be drawn (a board that breaks
+            // BoardPosition's invariant, or a die outside 1–6): fail visible,
+            // don't crash.
             CurrentRequest = null;
             MappingError = exception.Message;
         }

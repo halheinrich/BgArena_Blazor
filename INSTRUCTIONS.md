@@ -25,11 +25,13 @@ https://github.com/halheinrich/BgArena_Blazor — branch `main`.
   tournament server — the server itself is reached over HTTP.
 - **BgDiag_Razor** — `BackgammonDiagram`, the view-only board primitive the
   replay renders on.
-- **BackgammonDiagram_Lib** — `DiagramRequest` (+ `Builder`), `DiagramMode`;
-  the request shape the replay mapper builds (explicit reference per house
+- **BackgammonDiagram_Lib** — `DiagramRequest.ForBoard` and a board's display
+  facts (`DisplayFacts`, `DiceFaces`, `MatchRailScore`, `MoneyRailScore`);
+  the request the replay mapper builds (explicit reference per house
   pattern — directly consumed, though also reachable transitively).
-- **BgDataTypes_Lib** — `CubeOwner`, the diagram-side cube vocabulary the
-  mapper targets (explicit reference per house pattern).
+- **BgDataTypes_Lib** — `BoardPosition`, the board value a served position
+  becomes, and `CubeOwner`, the diagram-side cube vocabulary the mapper
+  targets (explicit reference per house pattern).
 
 Test-only (never referenced by the app):
 
@@ -59,7 +61,7 @@ and `Directory.Packages.props` (Central Package Management — no inline
   subscription, the match export); `ArenaResult`, the ok-or-documented-refusal
   envelope; `MatchExportFile`, an export's bytes as served;
   `DiagramContext` and `ReplayDiagramMapper`, the source-agnostic board
-  context and the position → `DiagramRequest` mapping the replay and live
+  context and the position → board-request mapping the replay and live
   views share.
 - **Pages** — `Components/Pages/`, one per route: engines (`/`, polling),
   the match list and launch form, match detail, replay, audit timeline and
@@ -131,23 +133,38 @@ server serves — each entry's `state`, then the game's `finalState` — and
 never applies a move to a board app-side. `ReplayDiagramMapper` is the whole
 app-side glue: every replay position arrives in seat One's frame and is
 handed to the diagram unchanged, so seat One (engineOne) is the diagram's
-positive/on-roll side for the whole match and **nothing ever flips**. Play
-entries render checker-style carrying their dice; cube entries and
-`finalState` render cube-style with `[0, 0]` dice — exactly the split
-`DiagramRequest.Builder` validates. Money sessions pass `MatchLength = 0`
-through (the diagram's own money sentinel) with the needs fields deliberately
-0 — the renderer never reads them on that path. Captions name the actor and
-action (`ReplayNarration`, shared with the live view); moves print verbatim
-in the actor's own numbering, with the contract's two documented sentinels
-given their standard notation names (from 25 = "bar", to 0 = "off").
+positive/on-roll side for the whole match and **nothing ever flips**.
+
+**Every arena board is a board, never a decision.** Each position becomes a
+`DiagramRequest.ForBoard` request: the served board as a `BoardPosition`,
+and `DisplayFacts` stating only what the API serves. The facts are the
+engine names on the rails, the cube's value and owner, and the dice of a
+play entry in the served order (cube entries and `finalState` show none).
+The score is the other fact. A match board states each side's away score
+entering the game and the game's served Crawford flag
+(`MatchRailScore`). A money board, the API's match length 0, states the
+money label with **no Jacoby rule** (`MoneyRailScore(null)`), because the
+API states none. The diagram words the score by the rule it uses for a
+decision's: `needs {n}`, ` Crawford` and a `Cr` cube, and `Dmp` at
+1-away/1-away, derived from the away scores and never supplied. Nothing of a
+decision is stated: no `"Cube Action?"` (decision-only; Hal, 2026-09-28), no
+analysis. A cube or final step also states no title or other text in its
+place, so its title strip is empty and the diagram drops it (Hal,
+2026-09-29, on halheinrich/backgammon#273; see Pitfalls). The pip counts
+are the diagram's, read off the drawn board.
+
+Captions name the actor and action (`ReplayNarration`, shared with the live
+view); moves print verbatim in the actor's own numbering, with the
+contract's two documented sentinels given their standard notation names
+(from 25 = "bar", to 0 = "off").
 
 **One mapping, two sources (`DiagramContext`).** The mapper is driven by a
 source-agnostic context — engine names and match length (match-level), plus
 the entering scores and Crawford flag of the game in view (game-level). The
 settled replay builds it from `MatchGamesResponse` + `GameReplay`; the live
 feed builds it from `MatchSummary` + the snapshot / game-started event. Six
-identical facts either way, so the mapper (and the money-sentinel needs
-derivation inside it) stays single-sourced. Crawford is a **frame-free** fact
+identical facts either way, so the mapper (and the rail score it states from
+them) stays single-sourced. Crawford is a **frame-free** fact
 the producer now carries on the live events, so it is rendered from the feed —
 never re-derived client-side (the Crawford-vs-post-Crawford rule needs match
 history the substrate owns).
@@ -189,24 +206,33 @@ has no clock rows — normal, not a gap, so the legend is omitted there. The
 envelope's `integrity` note, when present, renders as a trusted-prefix
 warning banner.
 
-**Fail visible at the render boundary.** The viewer maps inside a try/catch:
-a position the Builder refuses renders an explicit "cannot be rendered"
-panel in place of the board while stepping stays alive. No clamping, no
-crash — legitimate producer data the renderer can't draw is surfaced, not
-massaged.
+**Fail visible at the render boundary.** The replay viewer and the live page
+map inside a try/catch for `ArgumentException`, the refusal a position that
+cannot be drawn raises: a served board that breaks `BoardPosition`'s
+invariant, or a die outside 1–6. Such a position renders an explicit
+"cannot be rendered" panel in place of the board while stepping stays
+alive. No massaging, no crash: served data the diagram can't draw is
+surfaced.
 
-**Test strategy, by layer.** Unit: the mapper (frame rule, dice split, money
-sentinel, cube-owner mapping). Client: `ArenaClient` over a transport-layer
+**Test strategy, by layer.** Unit: the mapper (a board request, never a
+decision; the frame rule; the dice split with no decision-domain text; the
+cube-owner mapping; the Crawford flag and the money label as served; a
+malformed board refused). Client: `ArenaClient` over a transport-layer
 stub (`HttpMessageHandler`, never an interface) so the real serialization
 path runs against canned golden-shaped JSON — including a byte-exact pin
 that our serialized `StartMatchRequest` matches the producer's golden
 request text (the inverse direction of the producer's own pins). Wire
 (bUnit): pages over a per-route stub — forms post through the real client,
-refusals render, `[EditorRequired]` guards shared-component parameters.
-Smoke (gating): `ArenaSmokeTests` boots the real server in-proc, connects
-two reference engines over real WebSockets, drives a fixed-seed match to
+refusals render, `[EditorRequired]` guards shared-component parameters —
+and the replay viewer and live page read the drawn board's texts back
+through the real mapper and renderer: a play step's roll and no decision
+text on a cube or final step, the served Crawford flag, double match point
+worded from the score, the money label with no Jacoby rule, and the pip
+counts. Smoke (gating): `ArenaSmokeTests` boots the real server in-proc,
+connects two reference engines over real WebSockets, drives a fixed-seed match to
 completion through `ArenaClient`, consumes the replay endpoint's real JSON,
-maps every entry and finalState of every game, and renders + steps
+maps every entry and finalState of every game to a board request stating
+the game's served Crawford flag, and renders + steps
 `ReplayViewer` through the whole payload; it then consumes the audit
 endpoint's real JSON (created-first / terminal-last, every decision event's
 replay join inside the served replay's bounds, the clockless flat-regime
@@ -279,13 +305,26 @@ Configuration:
   actor's own numbering. The only permitted translation is presentational:
   the contract's two pinned sentinels (from 25 = bar, to 0 = off). Anything
   that needs to know whose frame a number is in is over the line.
-- **The Builder caps `CubeSize` at 4096; the producer does not cap the cube.**
-  Unreachable in practice, but a legitimate payload could refuse to render.
-  The viewer's mapping try/catch renders the error in place of the board —
-  keep that boundary; don't clamp the value and don't let the page crash.
-- **`MatchLength == 0` is the money sentinel, and the needs fields are then
-  meaningless.** The mapper sets them to 0 on purpose (the renderer's money
-  paths never read them). Don't "fix" them to `0 − score` negatives.
+- **An arena board states the API's facts and nothing else.** Don't derive
+  a Crawford status (the Crawford-vs-post-Crawford rule needs match history
+  the substrate owns). Don't guess a Jacoby rule for a money board: the API
+  states none, so it is `MoneyRailScore(null)`. Don't supply double match
+  point: the diagram words it from the away scores. The API's money
+  sentinel (match length 0) is read in the mapper to choose the money
+  label; its retirement is BgTournament's, halheinrich/backgammon#317.
+- **No decision-domain text on an arena board, and nothing in its place.**
+  `"Cube Action?"` is a decision's diagram's alone. A cube-offer,
+  cube-response or final-position board states no title and no other text
+  to hold the title strip open. Its strip is empty, so the diagram drops it
+  and the board rescales by about 5% against a play step, whose strip shows
+  its roll. That is accepted (Hal, 2026-09-29, on
+  halheinrich/backgammon#273): `DisplayFacts.Title` is content, not a
+  geometry lever. Whether stable geometry is wanted is
+  halheinrich/backgammon#318.
+- **Keep the render boundary.** A served position the diagram cannot draw
+  raises `ArgumentException` from the mapper. The viewer and the live page
+  render it in place of the board. Don't massage the data, and don't let
+  the page crash.
 - **Canned JSON fixtures are copies, not the contract.** `CannedJson` (and
   the client tests' inline strings) mirror the producer's golden pins for
   convenience. If the smoke is ever weakened, those copies become a silent
@@ -339,9 +378,6 @@ Configuration:
 
 - **Keyboard stepping on the replay page** (←/→ for prev/next) — the stepper
   is button-only today.
-- **Pip counts on replay boards** — `DiagramOptions.ShowPipCount` exists;
-  the mapper would need to compute pips from the served Mop (arithmetic, not
-  interpretation) or the producer could serve them.
 - **Match-list paging/filtering** — the dashboard renders every record;
   fine for v1 volumes, wants bounding once tournaments multiply records.
 - **Surface `xgid`** on replay positions when the producer starts populating

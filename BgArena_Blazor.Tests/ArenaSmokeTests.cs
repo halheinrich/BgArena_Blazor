@@ -27,7 +27,7 @@ namespace BgArena_Blazor.Tests;
 /// (EngineClient.ServeAsync on TestServer sockets), ArenaClient starts a
 /// fixed-seed match and polls it to completion, the replay endpoint's real
 /// JSON is consumed, every entry and finalState of every game runs through
-/// ReplayDiagramMapper (Builder-validated), and ReplayViewer renders and
+/// ReplayDiagramMapper to a board request, and ReplayViewer renders and
 /// steps through the whole payload. The canned-JSON tests elsewhere are
 /// convenience fixtures; this is where the contract is proven.
 /// </summary>
@@ -127,15 +127,23 @@ public class ArenaSmokeTests : BunitContext
         Assert.Equal(("SmokeAlpha", "SmokeBeta", 2), (replay.EngineOne, replay.EngineTwo, replay.MatchLength));
         Assert.NotEmpty(replay.Games);
 
-        // Every renderable position of every game must survive the mapper
-        // (Builder validation runs on each).
+        // Every renderable position of every game maps to a board request (the
+        // served board must be a well-formed BoardPosition), states the game's
+        // served Crawford flag, and is never a decision.
         foreach (GameReplay game in replay.Games)
         {
             Assert.NotEmpty(game.Entries);
             DiagramContext context = DiagramContext.ForGame(replay, game);
-            foreach (GameEntry entry in game.Entries)
-                Assert.NotNull(ReplayDiagramMapper.ForEntry(context, entry));
-            Assert.NotNull(ReplayDiagramMapper.ForFinalState(context, game.FinalState));
+            var expectedScore = new MatchRailScore(
+                replay.MatchLength - game.SeatOneScore, replay.MatchLength - game.SeatTwoScore, game.IsCrawford);
+            IEnumerable<DiagramRequest> requests = game.Entries
+                .Select(entry => ReplayDiagramMapper.ForEntry(context, entry))
+                .Append(ReplayDiagramMapper.ForFinalState(context, game.FinalState));
+            foreach (DiagramRequest request in requests)
+            {
+                Assert.Null(request.Decision);
+                Assert.Equal(expectedScore, request.Display!.Score);
+            }
         }
 
         // And the viewer renders + steps through the whole real payload.
@@ -357,6 +365,8 @@ public class ArenaSmokeTests : BunitContext
     {
         DiagramContext context = DiagramContext.ForLiveGame(summary, seatOneScore, seatTwoScore, isCrawford);
         DiagramRequest request = ReplayDiagramMapper.ForEntry(context, entry);
+        Assert.Null(request.Decision);
+        Assert.Equal(isCrawford, Assert.IsType<MatchRailScore>(request.Display!.Score).IsCrawford);
         IRenderedComponent<ReplayBoard> cut = Render<ReplayBoard>(p => p.Add(c => c.Request, request));
         Assert.NotNull(cut.Find(".replay-board svg"));
         return 1;

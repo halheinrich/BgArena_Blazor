@@ -8,8 +8,12 @@ namespace BgArena_Blazor.Tests;
 /// bUnit wire tests for the replay viewer: the game picker, the stepper
 /// (entries then finalState), the actor-and-action captions with verbatim
 /// mover-relative notation ("bar"/"off" for the contract's two sentinels),
-/// cursor reset on game switch, and the fail-visible path for a position the
-/// diagram cannot draw (cube beyond the renderer's 4096 cap).
+/// cursor reset on game switch, the fail-visible path for a position the
+/// diagram cannot draw (a malformed served board), and what the drawn board
+/// states through the real mapper and renderer: a play step's roll and no
+/// decision-domain text on a cube or final step, the game's Crawford flag,
+/// double match point worded from the score, and the money label with no
+/// Jacoby rule.
 /// </summary>
 public class ReplayViewerTests : BunitContext
 {
@@ -50,6 +54,21 @@ public class ReplayViewerTests : BunitContext
     private IRenderedComponent<ReplayViewer> RenderViewer(MatchGamesResponse? replay = null) =>
         Render<ReplayViewer>(p => p.Add(c => c.Replay, replay ?? TwoGameMatch()));
 
+    /// <summary>Every text the drawn board's SVG shows, in document order.</summary>
+    private static IReadOnlyList<string> BoardTexts(IRenderedComponent<ReplayViewer> cut) =>
+        [.. cut.FindAll(".replay-board text").Select(text => text.TextContent)];
+
+    /// <summary>A match of one one-play game, entered at the given score (match length 0 is money).</summary>
+    private static MatchGamesResponse OnePlayMatch(
+        int matchLength, int seatOneScore, int seatTwoScore, bool isCrawford) =>
+        new("m-score", "Alpha", "Beta", matchLength, MatchStatus.Completed,
+        [
+            new GameReplay(1, Seat.One, GameResultKind.Single, CubeValue: 1, Points: 1,
+                seatOneScore, seatTwoScore, isCrawford,
+                Entries: [new PlayEntry(Seat.One, Pos(), 3, 1, [new PlayMove(8, 5)])],
+                FinalState: Pos()),
+        ]);
+
     [Fact]
     public void FirstStep_ShowsTheOpeningPlayCaptionAndRendersTheBoard()
     {
@@ -58,6 +77,16 @@ public class ReplayViewerTests : BunitContext
         Assert.Equal("Alpha rolls 3-1: 8/5 6/5", cut.Find("#step-caption").TextContent);
         Assert.Contains("step 1 of 4", cut.Find("#step-indicator").TextContent);
         Assert.NotNull(cut.Find(".replay-board svg"));
+    }
+
+    [Fact]
+    public void Board_DrawsThePipCountsOfTheServedBoard()
+    {
+        // The diagram reads the pip counts off the drawn board — nothing
+        // app-side states them — so the opening position shows 167 a side.
+        var cut = RenderViewer();
+
+        Assert.Equal(2, BoardTexts(cut).Count(text => text == "Pip: 167"));
     }
 
     [Fact]
@@ -122,13 +151,16 @@ public class ReplayViewerTests : BunitContext
     [Fact]
     public void UndrawablePosition_RendersTheErrorInsteadOfTheBoardAndSteppingSurvives()
     {
-        // A cube beyond the renderer's 4096 cap is legitimate producer data
-        // the diagram refuses — fail visible, not clamp, not crash.
-        var game = new GameReplay(1, Seat.One, GameResultKind.Single, CubeValue: 8192, Points: 8192,
+        // A served board that breaks BoardPosition's invariant (sixteen of
+        // seat One's checkers) cannot be drawn — fail visible, not massage,
+        // not crash.
+        int[] sixteenCheckers = [.. OpeningBoard];
+        sixteenCheckers[6] = 6;
+        var game = new GameReplay(1, Seat.One, GameResultKind.Single, CubeValue: 1, Points: 1,
             SeatOneScore: 0, SeatTwoScore: 0, IsCrawford: false,
             Entries: [new PlayEntry(Seat.One, Pos(), 3, 1, [new PlayMove(8, 5)])],
-            FinalState: Pos(cube: 8192, CubeOwner.SeatTwo));
-        var cut = RenderViewer(new MatchGamesResponse("m-big", "Alpha", "Beta", 0, MatchStatus.Completed, [game]));
+            FinalState: new GamePosition(sixteenCheckers, 1, CubeOwner.Centered));
+        var cut = RenderViewer(new MatchGamesResponse("m-bad", "Alpha", "Beta", 3, MatchStatus.Completed, [game]));
 
         Assert.NotNull(cut.Find(".replay-board svg"));
 
@@ -139,6 +171,95 @@ public class ReplayViewerTests : BunitContext
         cut.Find("#step-prev").Click();
         Assert.Empty(cut.FindAll("#mapping-error"));
         Assert.NotNull(cut.Find(".replay-board svg"));
+    }
+
+    [Fact]
+    public void UncappedCube_IsDrawnAsServed()
+    {
+        // The producer does not cap the cube, and the diagram draws the value
+        // it is given (a cube's limit is the domain's rule): a large cube
+        // renders, never the fail-visible panel.
+        var game = new GameReplay(1, Seat.One, GameResultKind.Single, CubeValue: 8192, Points: 8192,
+            SeatOneScore: 0, SeatTwoScore: 0, IsCrawford: false,
+            Entries: [new PlayEntry(Seat.One, Pos(), 3, 1, [new PlayMove(8, 5)])],
+            FinalState: Pos(cube: 8192, CubeOwner.SeatTwo));
+        var cut = RenderViewer(new MatchGamesResponse("m-big", "Alpha", "Beta", 0, MatchStatus.Completed, [game]));
+
+        cut.Find("#step-end").Click();
+
+        Assert.Empty(cut.FindAll("#mapping-error"));
+        Assert.Contains("8192", BoardTexts(cut));
+    }
+
+    [Fact]
+    public void PlayStep_DrawsItsRoll_AndCubeAndFinalSteps_DrawNoDecisionText()
+    {
+        // "Cube Action?" is decision-only (Hal, 2026-09-28) and an arena board
+        // is never a decision; a cube or final step states nothing in its
+        // place — no title, no other text (Hal, 2026-09-29) — so its title
+        // strip is empty.
+        var cut = RenderViewer();
+        Assert.Contains("3-1 to play", BoardTexts(cut));
+
+        foreach (string caption in new[] { "Beta doubles to 2", "Alpha takes", "Game 1 over" })
+        {
+            cut.Find("#step-next").Click();
+            Assert.StartsWith(caption, cut.Find("#step-caption").TextContent, StringComparison.Ordinal);
+            IReadOnlyList<string> texts = BoardTexts(cut);
+            Assert.DoesNotContain("Cube Action?", texts);
+            Assert.DoesNotContain(texts, text => text.Contains("to play", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void CrawfordGame_DrawsTheServedFlagOnTheRailsAndTheCube()
+    {
+        var cut = RenderViewer(OnePlayMatch(matchLength: 3, seatOneScore: 2, seatTwoScore: 0, isCrawford: true));
+
+        IReadOnlyList<string> texts = BoardTexts(cut);
+        Assert.Contains("Alpha needs 1 Crawford", texts);
+        Assert.Contains("Beta needs 3 Crawford", texts);
+        Assert.Contains("Cr", texts);
+    }
+
+    [Fact]
+    public void GameServedAsNotCrawford_DrawsNoCrawfordAtTheSameScore()
+    {
+        // The same score served as not the Crawford game (post-Crawford): the
+        // flag is the API's, never re-derived from the score.
+        var cut = RenderViewer(OnePlayMatch(matchLength: 3, seatOneScore: 2, seatTwoScore: 0, isCrawford: false));
+
+        IReadOnlyList<string> texts = BoardTexts(cut);
+        Assert.Contains("Alpha needs 1", texts);
+        Assert.Contains("64", texts);
+        Assert.DoesNotContain(texts, text => text.Contains("Crawford", StringComparison.Ordinal));
+        Assert.DoesNotContain("Cr", texts);
+    }
+
+    [Fact]
+    public void DoubleMatchPoint_IsWordedFromTheScore()
+    {
+        // 1-away/1-away: the diagram words Dmp from the away scores — DMP is
+        // not a supplied flag (Hal, 2026-09-28).
+        var cut = RenderViewer(OnePlayMatch(matchLength: 3, seatOneScore: 2, seatTwoScore: 2, isCrawford: false));
+
+        IReadOnlyList<string> texts = BoardTexts(cut);
+        Assert.Contains("Alpha needs 1", texts);
+        Assert.Contains("Beta needs 1", texts);
+        Assert.Contains("Dmp", texts);
+    }
+
+    [Fact]
+    public void MoneySession_DrawsTheMoneyLabelWithNoJacobyRule()
+    {
+        // The API states no Jacoby rule, so the board states none: the bare
+        // money label on both rails, never a guessed rule.
+        var cut = RenderViewer(OnePlayMatch(matchLength: 0, seatOneScore: 0, seatTwoScore: 0, isCrawford: false));
+
+        IReadOnlyList<string> texts = BoardTexts(cut);
+        Assert.Contains("Alpha (Money Game)", texts);
+        Assert.Contains("Beta (Money Game)", texts);
+        Assert.DoesNotContain(texts, text => text.Contains("Jacoby", StringComparison.Ordinal));
     }
 
     [Fact]
