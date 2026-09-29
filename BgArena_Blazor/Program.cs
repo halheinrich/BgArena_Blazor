@@ -58,7 +58,7 @@ app.MapGet("/matches/{matchId}/export.mat", async (string matchId, ArenaClient a
     if (result.IsSuccess)
     {
         MatchExportFile file = result.Value;
-        return Results.File(file.Content, file.ContentType, file.FileName);
+        return Results.Bytes(file.Content.AsMemory(), file.ContentType, file.FileName);
     }
 
     return result.StatusCode switch

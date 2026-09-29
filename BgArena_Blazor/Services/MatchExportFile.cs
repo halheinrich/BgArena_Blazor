@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace BgArena_Blazor.Services;
 
 /// <summary>
@@ -7,7 +9,10 @@ namespace BgArena_Blazor.Services;
 /// JSON shape but an opaque file — a terminal match's Jellyfish <c>.MAT</c>
 /// transcript — captured verbatim so the Arena relay can re-emit it unchanged.
 /// </summary>
-/// <param name="Content">The exported file's raw bytes.</param>
+/// <param name="Content">
+/// The exported file's raw bytes, immutable: every holder of this record reads
+/// the same bytes, and none can change them for another.
+/// </param>
 /// <param name="ContentType">
 /// The served <c>Content-Type</c> header value (media type and any parameters,
 /// e.g. <c>text/plain; charset=utf-8</c>); null if the server sent none.
@@ -16,4 +21,4 @@ namespace BgArena_Blazor.Services;
 /// The download filename from the served <c>Content-Disposition</c> (e.g.
 /// <c>match_{id}.mat</c>); null if the server sent no filename.
 /// </param>
-public sealed record MatchExportFile(byte[] Content, string? ContentType, string? FileName);
+public sealed record MatchExportFile(ImmutableArray<byte> Content, string? ContentType, string? FileName);

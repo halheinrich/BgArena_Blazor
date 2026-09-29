@@ -1,7 +1,9 @@
+using System.Collections.Immutable;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using BgTournament.Api;
 
@@ -169,7 +171,10 @@ public sealed class ArenaClient
         // Any other non-success is undocumented: fail loud, per the contract.
         response.EnsureSuccessStatusCode();
 
-        byte[] content = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        // The array is read fresh and never escapes this method, so adopting
+        // it as immutable bytes is safe without a copy.
+        ImmutableArray<byte> content = ImmutableCollectionsMarshal.AsImmutableArray(
+            await response.Content.ReadAsByteArrayAsync(cancellationToken));
         string? contentType = response.Content.Headers.ContentType?.ToString();
         string? fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('"');
         return ArenaResult<MatchExportFile>.Ok(new MatchExportFile(content, contentType, fileName));
