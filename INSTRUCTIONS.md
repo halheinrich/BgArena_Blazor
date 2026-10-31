@@ -1,21 +1,75 @@
-# BgArena_Blazor — Subproject Instructions
+# BgArena_Blazor
 
 > Collaboration contract: [`../AGENTS.md`](../AGENTS.md)
 > Umbrella status & dependency graph: [`../INSTRUCTIONS.md`](../INSTRUCTIONS.md)
 > Mission & principles: [`../VISION.md`](../VISION.md)
+> Open work: the [tracker](https://github.com/halheinrich/backgammon/issues), label `BgArena_Blazor`.
+
+## What it is for
+
+The tournament arena's admin console and spectator front-end: polling
+dashboards for engines, matches and tournaments, with launch and create forms;
+step-through replay of terminal matches rendered on `BackgammonDiagram`; a
+verbatim audit timeline for terminal matches; a `.mat` download; and a
+follow-live per-move view of a running match.
+
+It consumes BgTournament's admin HTTP surface, of which it is the only
+consumer. Nothing consumes it: it is an application, not a library, and
+BgTournament.Server's csproj names it only in an `InternalsVisibleTo` grant to
+the test project. Its types are therefore app-internal in intent, public only
+where the Razor component model requires it. `DiagramContext` and
+`ReplayDiagramMapper` are public without that need; internalizing them is
+halheinrich/backgammon#9.
 
 ## Stack
 
-C# / .NET 10 — Blazor Web App (Interactive Server rendering), xUnit + bUnit +
-`Microsoft.AspNetCore.Mvc.Testing` test project. Visual Studio 2026, Windows.
+C# / .NET 10: a Blazor Web App (Interactive Server rendering) with one
+stylesheet (`wwwroot/app.css`) and no JavaScript of its own, and a test project
+on xUnit, bUnit and `Microsoft.AspNetCore.Mvc.Testing`. Visual Studio 2026,
+Windows.
 
-## Solution
+## Build and test
 
-`D:\Users\Hal\Documents\Visual Studio 2026\Projects\backgammon\BgArena_Blazor\BgArena_Blazor.slnx`
+From this directory:
 
-## Repo
+```bash
+dotnet build BgArena_Blazor.slnx
+```
 
-https://github.com/halheinrich/BgArena_Blazor — branch `main`.
+```bash
+dotnet test BgArena_Blazor.slnx
+```
+
+The solution has thirteen projects: this repo's two and, by relative path,
+eleven outside ones (BackgammonDiagram_Lib, BgDataTypes_Lib, BgDiag_Razor,
+BgGame_Lib, BgMatchFormat_Lib, BgMoveGen, and BgTournament's Api, Core,
+EngineClient, Protocol and Server). It needs the umbrella checkout with those
+submodules initialized.
+
+The suite reads no `TestData` and no parity model, so nothing in it passes
+vacuously on a missing file. The gating smokes (`ArenaSmokeTests`) boot
+BgTournament's real server in process with reference engines, and need no
+fixture and no running server.
+
+To run the app against a server, start each in its own terminal:
+
+```bash
+dotnet run --project ../BgTournament/BgTournament.Server
+```
+
+```bash
+dotnet run --project BgArena_Blazor/BgArena_Blazor.csproj
+```
+
+The app serves `https://localhost:7260`, and its `appsettings.json` already
+points `Arena:BaseAddress` at the server's dev port, `http://localhost:5251`
+(see "Routes and configuration"). The dashboards stay empty until an engine
+connects; the quickest engine is BgTournament's reference bot (its
+"Reference-bot executable"):
+
+```bash
+dotnet run --project ../BgTournament/BgTournament.ReferenceBot -- --server ws://localhost:5251/engine --name Alpha
+```
 
 ## Depends on
 
@@ -45,9 +99,9 @@ Test-only (never referenced by the app):
 
 ## Layout
 
-Two projects under `BgArena_Blazor.slnx`, governed by repo-root
-`Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
-and `Directory.Packages.props` (Central Package Management — no inline
+This repo's two projects are governed by repo-root `Directory.Build.props`
+(TFM, `TreatWarningsAsErrors`, XML doc generation) and
+`Directory.Packages.props` (Central Package Management — no inline
 `Version=`).
 
 **`BgArena_Blazor/`** — the Blazor Web App (Interactive Server). Four areas:
@@ -88,45 +142,77 @@ the gating smoke against the real tournament server in-process, the real
 wire and reference engines, no stubs. `IsolatedTournamentServer` gives each
 in-process tournament server a throwaway journal directory.
 
+## Routes and configuration
+
+The app's outward surface is the UI, which no XML doc carries:
+
+```
+/                                   connected engines (in match/idle), polling
+/matches                            launch form + all matches, newest first (watch link on Running rows)
+/matches/{matchId}                  record card; polls while Running; watch-live when Running, else replay + audit + .MAT
+/matches/{matchId}/replay           step-through replay (load-once; partiality note for non-completed)
+/matches/{matchId}/audit            arbitration timeline, verbatim rows (load-once; terminal-only, 409 offers /live)
+/matches/{matchId}/live             follow-live per-move board over the SSE feed; hands off to replay when terminal
+/matches/{matchId}/export.mat       the .MAT download: a relay endpoint in Program.cs, not a page
+/tournaments                        create form (ordered seeding pick) + all tournaments, newest first
+/tournaments/{tournamentId}         standings + schedule ledger (rows link to matches); polls while Running
+```
+
+Configuration:
+
+- `Arena:BaseAddress` (required) — the tournament server's HTTP base address.
+  `appsettings.json` ships the server's dev address, `http://localhost:5251`
+  (BgTournament's launchSettings); a deployment overrides it.
+- `Arena:ApiKey` (optional) — the admin API key this host presents on every
+  request, in the header `BgTournament.Api.AdminApiKey.HeaderName` owns.
+  Configured once on the typed client, so it covers polling, replay, audit,
+  the `.MAT` export relay and the SSE live feed alike. Absent ⇒ anonymous,
+  byte-identical requests: the dev default against a keyless server (the beta
+  deployment's record is halheinrich/backgammon#6). Present ⇒ the server stamps
+  the key's actor name on the durable record of each match and tournament this
+  host creates. What the server refuses, and why a mismatch is loud, is
+  BgTournament's "Admin identity"; what this app does with the 401 is the first
+  pitfall. The value is a secret: it lives only on the client's default
+  headers, is never logged, and never reaches a rendered error.
+
 ## Architecture
 
-**What this is.** The tournament arena's admin console and spectator
-front-end: polling dashboards over BgTournament's admin HTTP API (engines,
-matches, tournaments — with launch/create forms), step-through replay of
-terminal matches rendered on `BackgammonDiagram`, a verbatim audit-timeline
-viewer for terminal matches, and a follow-live per-move view of a running
-match over the server's SSE feed.
-
 **One route to the server.** `ArenaClient` is the only thing that speaks
-HTTP: nine endpoints over one `IHttpClientFactory` typed client whose base
-address is configuration (`Arena:BaseAddress` — the UI host calls the
-tournament server server-to-server, so CORS never enters). JSON is plain Web
+HTTP: eleven calls, over eleven server endpoints, on one `IHttpClientFactory`
+typed client whose base address is configuration. The UI host calls the
+tournament server server-to-server, so CORS never enters. JSON is plain Web
 defaults end to end, zero converter configuration — the producer contract
 (pinned enum strings, polymorphic replay entries). The refusal model mirrors
 the producer's documentation exactly: statuses an endpoint documents
 (400/404/409 as applicable) fold into `ArenaResult<T>` — `Ok(value)` or
 `Refused(status, reason)`, the reason being the typed `ErrorResponse` body
-when one is present — while any undocumented status throws. Listings return
-plain lists (only 200 is documented for them).
+when one is present — while any undocumented status throws
+`HttpRequestException`. Listings return plain lists (only 200 is documented
+for them).
 
-**One polling implementation.** `PollingComponentBase` owns the loop: initial
-load in `OnInitializedAsync`, then a `PeriodicTimer` (2 s) re-running
-`RefreshAsync` on the dispatcher. Its failure taxonomy is the client's
-documented/undocumented line applied to polling: transport failures
-(`HttpRequestException`, timeout) keep the last good data and raise
-`IsUnreachable` (the banner) while the loop retries — self-healing; anything
-else (a `JsonException` is a contract break) is dispatched into the component
-lifecycle via `DispatchExceptionAsync`, never swallowed by the background
-task. `ShouldPoll == false` (terminal record) skips ticks without ending the
-loop, so a detail page whose route parameter changes resumes by itself;
-disposal cancels, then awaits the loop before tearing down.
+**One polling implementation.** `PollingComponentBase` owns the loop: an
+initial load, then a 2 s `PeriodicTimer` re-running `RefreshAsync` on the
+dispatcher. Its failure taxonomy is the client's documented/undocumented line
+applied to polling. An `HttpRequestException` (a transport failure, or an
+undocumented status the client threw) or a timeout keeps the last good data
+and raises `IsUnreachable`, the banner, while the loop retries, so the page
+heals itself. Anything else (a `JsonException` is a contract break) goes into
+the component lifecycle through `DispatchExceptionAsync`, never swallowed by
+the background task. `ShouldPoll == false` (a terminal record) skips ticks
+without ending the loop, so a detail page whose route parameter changes
+resumes by itself.
 
 **Server-authoritative forms.** The launch and create forms encode no request
-rules beyond a distinct-engines button gate: they submit and render the
-server's typed refusal reason. The rules live once, in the producer;
-re-encoding them client-side would be a second source of truth that rots.
-The tournament form's participant list is an ordered pick (add / move / 
-remove) because order is seeding order — the final standings tie-break.
+rules; their only client-side gates are buttons disabled until there is
+something to submit (two distinct engines, two participants). They submit and
+render the server's typed refusal reason. The rules live once, in the
+producer; re-encoding them client-side would be a second source of truth that
+rots. The help text under each form does state one producer rule, in the
+form's words: a supplied seed gives reproducible dice and a blank one fair
+dice (BgTournament, "Provably-fair dice"), and an even matches-per-pairing
+balances the seats (its "Tournament shape"). The tournament form's participant
+list is an ordered pick (add / move / remove) because order is seeding order —
+the final standings tie-break.
 
 **Replay: served positions only.** The viewer steps through positions the
 server serves — each entry's `state`, then the game's `finalState` — and
@@ -134,6 +220,8 @@ never applies a move to a board app-side. `ReplayDiagramMapper` is the whole
 app-side glue: every replay position arrives in seat One's frame and is
 handed to the diagram unchanged, so seat One (engineOne) is the diagram's
 positive/on-roll side for the whole match and **nothing ever flips**.
+Captions name the actor and action (`ReplayNarration`, shared with the live
+view).
 
 **Every arena board is a board, never a decision.** Each position becomes a
 `DiagramRequest.ForBoard` request: the served board as a `BoardPosition`,
@@ -144,19 +232,11 @@ The score is the other fact. A match board states each side's away score
 entering the game and the game's served Crawford flag
 (`MatchRailScore`). A money board, the API's match length 0, states the
 money label with **no Jacoby rule** (`MoneyRailScore(null)`), because the
-API states none. The diagram words the score by the rule it uses for a
-decision's: `needs {n}`, ` Crawford` and a `Cr` cube, and `Dmp` at
-1-away/1-away, derived from the away scores and never supplied. Nothing of a
-decision is stated: no `"Cube Action?"` (decision-only; Hal, 2026-09-28), no
-analysis. A cube or final step also states no title or other text in its
-place, so its title strip is empty and the diagram drops it (Hal,
-2026-09-29, on halheinrich/backgammon#273; see Pitfalls). The pip counts
-are the diagram's, read off the drawn board.
-
-Captions name the actor and action (`ReplayNarration`, shared with the live
-view); moves print verbatim in the actor's own numbering, with the
-contract's two documented sentinels given their standard notation names
-(from 25 = "bar", to 0 = "off").
+API states none. The diagram words the score itself, double match point
+included, and counts the pips off the drawn board (BackgammonDiagram_Lib,
+"Presentation and rail text"). Nothing of a decision is stated: no
+`"Cube Action?"` (decision-only; Hal, 2026-09-28), no analysis, and on a cube
+or final step no title or other text in its place (see Pitfalls).
 
 **One mapping, two sources (`DiagramContext`).** The mapper is driven by a
 source-agnostic context — engine names and match length (match-level), plus
@@ -164,10 +244,9 @@ the entering scores and Crawford flag of the game in view (game-level). The
 settled replay builds it from `MatchGamesResponse` + `GameReplay`; the live
 feed builds it from `MatchSummary` + the snapshot / game-started event. Six
 identical facts either way, so the mapper (and the rail score it states from
-them) stays single-sourced. Crawford is a **frame-free** fact
-the producer now carries on the live events, so it is rendered from the feed —
-never re-derived client-side (the Crawford-vs-post-Crawford rule needs match
-history the substrate owns).
+them) stays single-sourced. Crawford is a **frame-free** fact the feed
+carries, because the Crawford-vs-post-Crawford rule needs match history the
+substrate owns.
 
 **Live spectating: follow the latest.** `LiveMatch` subscribes to the SSE
 feed and always renders the latest position (no stepping — replay owns that).
@@ -177,14 +256,16 @@ waiting placeholder), per-move entries render through the shared mapper, a
 game-started event shows a between-games placeholder (naming the Crawford
 game), and the terminal event shows the outcome and hands off to replay. It is
 push not poll, so it is a bespoke component rather than a
-`PollingComponentBase`, but it **mirrors that base's failure taxonomy**: a
-transport drop keeps the last board, raises the unreachable banner, and
-re-subscribes (the fresh snapshot re-establishes state — v1 has no
-`Last-Event-ID` resume), while a malformed event (`JsonException`) escalates
-into the circuit. `ArenaClient.SubscribeMatchLiveAsync` decides the documented
-404 at subscribe time and folds it into the `ArenaResult` envelope; the
-ordered stream lives inside `Ok`, and an inner iterator owns the response
-lifetime.
+`PollingComponentBase`. A transport drop keeps the last board, raises the
+unreachable banner and re-subscribes; the fresh snapshot re-establishes state
+(BgTournament, "Live feed shape": the feed honors no `Last-Event-ID`). A
+malformed event stays out of that path as a `JsonException`, but unlike the
+poll loop nothing dispatches it: it faults the watch task, and the page stays
+on its last board with no banner until disposal or a change of match id
+rethrows it. A timeout (`TaskCanceledException`) takes the same unwatched path.
+`ArenaClient.SubscribeMatchLiveAsync` decides the documented refusals at
+subscribe time and folds them into the `ArenaResult` envelope; the ordered
+stream lives inside `Ok`, and an inner iterator owns the response lifetime.
 
 **Audit: verbatim rows, never joins.** `MatchAudit` renders a terminal
 match's arbitration timeline (`GET /matches/{matchId}/audit`) as a flat list
@@ -193,18 +274,13 @@ sibling of `ReplayNarration`). Load-once like replay, and the refusals
 mirror it: 404 is an unknown id — or, this endpoint's second documented
 flavor, a known record whose journal cannot be read, in which case the 404
 carries the server's reason; 409 means still running, and the page offers
-the live view. Everything renders verbatim: the fair-dice fields
-(commitment / algorithm / revealed key) are displayed as-is for an external
-arbiter — independent re-verification is explicitly declined (user ruling
-2026-07-04) — and the packet's documented correlation semantics
-(clock-precedes-decision, declined double windows, the trailing fatal clock)
-surface only as the static legend on clocked timelines, never as computed
-clock→decision joins or think-time aggregates (those would re-encode the
-producer's ordering contract app-side; aggregates, if ever wanted, are a
-future producer-side projection). A clockless (flat-regime) timeline simply
-has no clock rows — normal, not a gap, so the legend is omitted there. The
-envelope's `integrity` note, when present, renders as a trusted-prefix
-warning banner.
+the live view. Everything renders verbatim, for an external arbiter:
+independent re-verification of the fair-dice fields is declined (see
+Pitfalls), and the packet's documented ordering surfaces only as a static
+legend on clocked timelines. Computed joins would re-encode the producer's
+ordering contract app-side. A clockless (flat-regime) timeline simply has no
+clock rows, so the legend is omitted there. The envelope's `integrity` note,
+when present, renders as a trusted-prefix warning banner.
 
 **Fail visible at the render boundary.** The replay viewer and the live page
 map inside a try/catch for `ArgumentException`, the refusal a position that
@@ -214,72 +290,46 @@ invariant, or a die outside 1–6. Such a position renders an explicit
 alive. No massaging, no crash: served data the diagram can't draw is
 surfaced.
 
-**Test strategy, by layer.** Unit: the mapper (a board request, never a
-decision; the frame rule; the dice split with no decision-domain text; the
-cube-owner mapping; the Crawford flag and the money label as served; a
-malformed board refused). Client: `ArenaClient` over a transport-layer
-stub (`HttpMessageHandler`, never an interface) so the real serialization
-path runs against canned golden-shaped JSON — including a byte-exact pin
-that our serialized `StartMatchRequest` matches the producer's golden
-request text (the inverse direction of the producer's own pins). Wire
-(bUnit): pages over a per-route stub — forms post through the real client,
-refusals render, `[EditorRequired]` guards shared-component parameters —
-and the replay viewer and live page read the drawn board's texts back
-through the real mapper and renderer: a play step's roll and no decision
-text on a cube or final step, the served Crawford flag, double match point
-worded from the score, the money label with no Jacoby rule, and the pip
-counts. Smoke (gating): `ArenaSmokeTests` boots the real server in-proc,
-connects two reference engines over real WebSockets, drives a fixed-seed match to
-completion through `ArenaClient`, consumes the replay endpoint's real JSON,
-maps every entry and finalState of every game to a board request stating
-the game's served Crawford flag, and renders + steps
-`ReplayViewer` through the whole payload; it then consumes the audit
-endpoint's real JSON (created-first / terminal-last, every decision event's
-replay join inside the served replay's bounds, the clockless flat-regime
-shape) and renders the audit page over the real payload. A second smoke
-subscribes to the real live feed: reference engines are gated shut (a
-`GatedPlayAgent` wrapping the seeded random bot) so the subscriber joins
-while the match is parked and catches the stream from the top; it asserts
-snapshot-first / terminal-last ordering, that the games finalized live are
-JSON-identical to the served replay, that every live board renders through
-the page's mapping path — and, while the match is parked, that the audit
-endpoint answers its documented 409 pointing at the live feed. The canned
-fixtures are convenience copies; **the smoke is where the contract is
-proven.**
+**Test strategy, by layer.** The canned fixtures are convenience copies;
+**the smoke is where the contract is proven.**
 
-## Public API
-
-An application, not a library — nothing in this repo is consumed by other
-submodules, and all types are app-internal in intent (public only where the
-Razor component model requires it). Its outward surface is the UI:
-
-```
-/                                   connected engines (claimed/idle), polling
-/matches                            launch form + all matches, newest first (watch-live link on Running rows)
-/matches/{matchId}                  record card; polls while Running; watch-live when Running, else replay + audit + .MAT
-/matches/{matchId}/replay           step-through replay (load-once; partiality note for non-completed)
-/matches/{matchId}/audit            arbitration timeline, verbatim rows (load-once; terminal-only, 409 offers /live)
-/matches/{matchId}/live             follow-live per-move board over the SSE feed; hands off to replay when terminal
-/tournaments                        create form (ordered seeding pick) + all tournaments
-/tournaments/{tournamentId}         standings + schedule ledger (rows link to matches)
-```
-
-Configuration:
-
-- `Arena:BaseAddress` (required) — the tournament server's HTTP base address;
-  startup throws without it. The server's dev default is
-  `http://localhost:5251` (see BgTournament's launchSettings).
-- `Arena:ApiKey` (optional) — the admin API key this host presents on every
-  request, in the header `BgTournament.Api.AdminApiKey.HeaderName` owns.
-  Configured once on the typed client (Program.cs), so it covers polling,
-  replay, audit, the `.MAT` export relay, and the SSE live feed alike. Absent
-  ⇒ anonymous, byte-identical requests (today's dev default against a keyless
-  server). Present ⇒ every admin call is attributed to the key's actor name in
-  the server's durable record. A key set against a keyless server, or a wrong
-  key against an enforcing one, is refused with a named 401 (folded into
-  `ArenaResult`) — a config mismatch fails loudly rather than silently serving
-  unattributed. The value is a secret: it lives only on the client's default
-  headers, is never logged, and never reaches a rendered error.
+- **Unit:** the mapper (a board request, never a decision; the frame rule; the
+  dice split with no decision-domain text; the cube-owner mapping; the
+  Crawford flag and the money label as served; a malformed board refused) and
+  the display wording.
+- **Client:** `ArenaClient` over a transport-layer stub (`HttpMessageHandler`,
+  never an interface), so the real serialization path runs against canned
+  golden-shaped JSON, including a byte-exact pin that our serialized
+  `StartMatchRequest` matches the producer's golden request text (the inverse
+  direction of the producer's own pins). The admin-key attachment has its own
+  tests.
+- **Wire (bUnit):** pages over a per-route stub. Forms post through the real
+  client and refusals render. The replay viewer and live page read the drawn
+  board's texts back through the real mapper and renderer: a play step's roll
+  and no decision text on a cube or final step, the served Crawford flag,
+  double match point worded from the score, the money label with no Jacoby
+  rule, and the pip counts.
+- **Host:** the `.mat` relay against a scripted upstream.
+- **Smoke (gating):** `ArenaSmokeTests`, the real server in process, with
+  reference engines on the real wire protocol over TestServer WebSockets.
+  - The primary path drives a fixed-seed match to completion through
+    `ArenaClient` and consumes the replay endpoint's real JSON, mapping every
+    entry and `finalState` of every game to a board request that states the
+    game's served Crawford flag, and renders and steps `ReplayViewer` through
+    the whole payload. It then consumes the audit endpoint's real JSON
+    (created-first / terminal-last, every decision event's replay join inside
+    the served replay's bounds, the clockless flat-regime shape) and renders
+    the audit page over it.
+  - The live path gates the reference engines shut (a `GatedPlayAgent`
+    wrapping the seeded random bot), so the subscriber joins while the match
+    is parked and catches the stream from the top. It asserts
+    snapshot-first / terminal-last ordering, that the games finalized live are
+    JSON-identical to the served replay, that every live board renders through
+    the page's mapping path, and, while the match is parked, that the audit
+    endpoint answers its documented 409 pointing at the live feed.
+  - The refusal path reads an unknown engine's typed reason from the real
+    server, and the export path pins that the relay's bytes equal the server's
+    own export and that its download headers survive.
 
 ## Pitfalls
 
@@ -290,112 +340,75 @@ Configuration:
   `SubscribeMatchLiveAsync` each honor it) rather than listing it per method.
   The listing calls (`GetEnginesAsync`/`GetMatchesAsync`/`GetTournamentsAsync`)
   return plain lists with no envelope, so a 401 there still throws
-  `HttpRequestException` and the poll loop banners it as "unreachable" — the
-  known gap of the no-envelope shape, acceptable because a real deployment is
-  configured to match its server; don't paper over it by widening a listing's
-  return shape.
+  `HttpRequestException` and the poll loop banners it as "unreachable". Widening
+  those shapes is halheinrich/backgammon#495; don't paper over it with a
+  second path. A fold is only as loud as its caller: the forms and the replay
+  and audit pages render the reason, the match detail, tournament detail and
+  live pages treat any refusal as not-found, and the `.mat` relay answers a 500.
 - **The frame rule is fixed — never flip anything.** Every replay position is
-  seat-One frame by producer contract; engineOne is always the diagram's
-  positive/on-roll side. A seat-Two play therefore shows its dice on seat
-  One's board half — cosmetic, the caption carries the actor. Do not "fix"
-  this by flipping app-side: the producer's `GameState.OpponentView` is the
-  system's single re-expression, and a second one is exactly the bug the
-  no-double-flip pins exist to prevent.
+  seat-One frame by producer contract. A seat-Two play therefore shows its
+  dice on seat One's board half: cosmetic, and the caption carries the actor.
+  Do not "fix" this by flipping app-side. The producer's
+  `GameState.OpponentView` is the system's single re-expression (BgTournament,
+  "The frame rule"), and a second one is exactly the bug its no-double-flip
+  pins exist to prevent.
 - **Moves are printed, never interpreted.** `PlayMove` coordinates are in the
   actor's own numbering. The only permitted translation is presentational:
   the contract's two pinned sentinels (from 25 = bar, to 0 = off). Anything
   that needs to know whose frame a number is in is over the line.
 - **An arena board states the API's facts and nothing else.** Don't derive
-  a Crawford status (the Crawford-vs-post-Crawford rule needs match history
-  the substrate owns). Don't guess a Jacoby rule for a money board: the API
-  states none, so it is `MoneyRailScore(null)`. Don't supply double match
-  point: the diagram words it from the away scores. The API's money
-  sentinel (match length 0) is read in the mapper to choose the money
-  label; its retirement is BgTournament's, halheinrich/backgammon#317.
-- **No decision-domain text on an arena board, and nothing in its place.**
-  `"Cube Action?"` is a decision's diagram's alone. A cube-offer,
-  cube-response or final-position board states no title and no other text
-  to hold the title strip open. Its strip is empty, so the diagram drops it
-  and the board rescales by about 5% against a play step, whose strip shows
-  its roll. That is accepted (Hal, 2026-09-29, on
+  a Crawford status, don't guess a Jacoby rule for a money board, and don't
+  supply double match point; "Every arena board is a board" says why. The
+  API's money sentinel (match length 0) is read in the mapper to choose the
+  money label; its retirement is BgTournament's, halheinrich/backgammon#317.
+- **No title on a cube or final board, not even to hold the strip open.** The
+  diagram draws a title strip only for content (BackgammonDiagram_Lib, "Title
+  strip"), so a step with none rescales by about 5% against a play step, whose
+  strip shows its roll (22 of about 450 units; halheinrich/backgammon#318's
+  booking, 2026-09-29). That is accepted (Hal, 2026-09-29, on
   halheinrich/backgammon#273): `DisplayFacts.Title` is content, not a
-  geometry lever. Whether stable geometry is wanted is
-  halheinrich/backgammon#318.
-- **Keep the render boundary.** A served position the diagram cannot draw
-  raises `ArgumentException` from the mapper. The viewer and the live page
-  render it in place of the board. Don't massage the data, and don't let
-  the page crash.
+  geometry lever. Whether stable geometry is wanted stays open on that issue.
+- **Keep the render boundary.** Don't massage a position the diagram refuses,
+  and don't let the page crash; "Fail visible at the render boundary" says
+  what renders instead.
 - **Canned JSON fixtures are copies, not the contract.** `CannedJson` (and
   the client tests' inline strings) mirror the producer's golden pins for
   convenience. If the smoke is ever weakened, those copies become a silent
   drift surface — the smoke against the real server is the contract proof;
   keep it gating.
-- **Poll-failure taxonomy is load-bearing.** Transport failures → banner +
-  retry (self-healing). A `JsonException` mid-poll is a producer contract
-  break and must escalate (it dispatches into the circuit) — folding it into
-  "unreachable" would hide a real break behind a soft banner.
-- **The live feed carries the same taxonomy — keep it so.** `LiveMatch` is
-  push, not poll, but a transport drop mid-stream self-heals (banner +
-  re-subscribe; the fresh snapshot re-establishes state — v1 has no
-  `Last-Event-ID` resume) while a malformed event stays a `JsonException` that
-  escalates. `SubscribeMatchLiveAsync` folds only the documented 404 into
-  `ArenaResult`; don't swallow a transport drop into that envelope, and don't
-  demote a parse failure to the banner.
-- **The audit page prints, never correlates.** The audit packet's ordering
-  semantics (a clock event precedes the decision it timed; a cube-offer
-  clock event with no cube event was a declined double window; a trailing
-  clock event timed the fatal decision) are the producer's contract,
-  surfaced only as `AuditNarration.ClockCorrelationNote` — a static legend.
-  Do not add clock→decision joins or think-time aggregation app-side; if
-  aggregates are ever wanted they are a producer-side projection. Fair-dice
-  fields (commitment / algorithm / key) render verbatim; the independent
-  re-verify badge is explicitly declined (user ruling 2026-07-04).
+- **The failure taxonomy is load-bearing, polled or pushed.** Transport
+  failures banner and retry; a `JsonException` is a producer contract break.
+  Folding it into "unreachable" would hide a real break behind a soft banner,
+  so don't demote a parse failure, and don't swallow a transport drop into the
+  `ArenaResult` envelope. The loops differ in what happens next: "One polling
+  implementation" dispatches the break, and "Live spectating" does not.
+- **The audit page prints, never correlates.** The packet's ordering semantics
+  are the producer's (BgTournament, "Arbitration log"), surfaced only as
+  `AuditNarration.ClockCorrelationNote`, a static legend. Do not add
+  clock→decision joins or think-time aggregation app-side; if aggregates are
+  ever wanted they are a producer-side projection. Fair-dice fields
+  (commitment / algorithm / key) render verbatim; an independent re-verify
+  badge is declined (ruled in session, 2026-07-04).
 - **A clockless audit timeline is normal.** The flat regime measures no
-  per-decision timing, so no clock rows and no legend is the expected shape
-  — never render it as a warning or a gap.
+  per-decision timing, so never render the missing clock rows and legend as a
+  warning or a gap.
 - **Razor markup namespaces come from `_Imports.razor`, not code-behind
   usings.** A component referenced only in markup (e.g. `BackgammonDiagram`)
   fails with RZ10012 unless its namespace is in `_Imports.razor` — the
   code-behind's `using` does not reach the markup.
-- **Two top-level-statement `Program` types are visible to the test
-  project** (the app's, and the server's via its test-only
-  `InternalsVisibleTo` grant). The server reference is aliased
-  (`Aliases="TournamentServer"`) and the smoke names
-  `TournamentServer::Program`; an unqualified `Program` in the test project
-  is a CS0433 waiting to happen.
-- **`BackgammonDiagram` has no intrinsic size** (documented producer
-  pitfall): its SVG is `viewBox` + `width="100%"`. `ReplayBoard` is the one
-  sized container — render through it, don't re-solve sizing per call site.
+- **Two top-level-statement `Program` types reach the test project** (the
+  app's, and the server's via its test-only `InternalsVisibleTo` grant). The
+  server reference is aliased (`Aliases="TournamentServer"`), so an unqualified
+  `Program` is the app's and the smoke names `TournamentServer::Program`;
+  dropping the alias is a CS0433.
+- **`BackgammonDiagram` takes its size from its host** (BgDiag_Razor, "Sizing:
+  the ratio, contain-fit and the board slot"). `ReplayBoard` is the one sized
+  container — render through it, don't re-solve sizing per call site.
 - **bUnit and the poll loop.** Pages start a 2 s `PeriodicTimer` on init;
   tests assert the initial load via `WaitForAssertion` (well inside the
   first tick) and rely on context disposal to end the loop. Don't write
   tests that wait for a tick — timing-flaky by construction.
-- **`Arena:BaseAddress` is fail-fast configuration.** Startup throws if it's
-  missing — deliberate; don't default it in code and mask a misconfigured
-  deployment.
-
-## Subproject-internal next steps
-
-- **Keyboard stepping on the replay page** (←/→ for prev/next) — the stepper
-  is button-only today.
-- **Match-list paging/filtering** — the dashboard renders every record;
-  fine for v1 volumes, wants bounding once tournaments multiply records.
-- **Surface `xgid`** on replay positions when the producer starts populating
-  it (schema-reserved, empty today).
-- **Per-match decision-timeout field on the launch form** if/when the
-  producer adds the per-match override (global-only today).
-- **Time-control field on the launch/create forms** — the requests carry an
-  optional `TimeControl` and the server honors it, but both forms always
-  send null today; clocked matches can only be started by API callers.
-- **Forfeit-cause pill on the LiveMatch terminal panel** — the terminal
-  event's `MatchSummary` carries `ForfeitCause`, but the live page's outcome
-  panel shows only `ForfeitedBy`; render the pill there for parity with the
-  dashboard and detail card (`ArenaDisplay` already owns the wording/CSS).
-- **Widen the listing-call return shapes to the `ArenaResult` envelope** —
-  the listing calls (`GetEnginesAsync` / `GetMatchesAsync` /
-  `GetTournamentsAsync`) return plain lists with no envelope, so a 401 from
-  an enforcing server throws `HttpRequestException` and the poll loop banners
-  it as "unreachable", masking an auth misconfiguration as a transport
-  failure. The envelope paths fold the surface-wide 401 (Arc 12); widening
-  the listing shapes to match is the fix. Documented in Pitfalls; surfaced
-  (flagged-not-folded) by the Arc 12 consumer adaptation.
+- **`Arena:BaseAddress` fails on first use, not at boot.** The check sits in
+  the typed client's configure callback, so a host missing it starts cleanly
+  and answers 500 at the first page that resolves `ArenaClient`. Don't default
+  it in code and mask a misconfigured deployment.
