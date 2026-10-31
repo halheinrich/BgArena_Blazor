@@ -6,12 +6,12 @@ using Microsoft.AspNetCore.Components;
 namespace BgArena_Blazor.Components.Pages;
 
 /// <summary>
-/// Step-through replay of a completed match. Loads once — a Completed
-/// match's transcripts are immutable, so there is nothing to poll. The two
-/// documented refusals render distinctly: 404 is an unknown id; 409 carries
-/// the server's reason (running: not yet; forfeited/aborted/faulted: no
-/// transcripts retained — the v1 contract) with a retry for the
-/// might-complete-later case.
+/// Step-through replay of a terminal match: all its games when Completed, and
+/// the games that finished before the break otherwise, with a partiality note.
+/// Loads once — a terminal match's transcripts are immutable, so there is
+/// nothing to poll. The two documented refusals render distinctly: 404 is an
+/// unknown id; 409 means the match is still running and carries the server's
+/// reason, with a retry for when it ends.
 /// </summary>
 public partial class MatchReplay : IDisposable
 {
@@ -32,7 +32,7 @@ public partial class MatchReplay : IDisposable
     /// <summary>True when the server answered 404 — no match with this id.</summary>
     protected bool NotFound { get; private set; }
 
-    /// <summary>The server's 409 reason — the match is known but has no replay.</summary>
+    /// <summary>The server's refusal reason: on its 409, the match is known but still running.</summary>
     protected string? RefusalReason { get; private set; }
 
     /// <summary>True when the load failed at the transport layer.</summary>

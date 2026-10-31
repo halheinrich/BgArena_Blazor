@@ -52,8 +52,9 @@
         <button id="launch-button" class="primary" @onclick="LaunchAsync" disabled="@(!CanLaunch)">Launch</button>
     </div>
     <p class="muted">
-        Match length 0 starts a money session (max games required). Seed and max
-        games are optional otherwise; an omitted seed is server-chosen and recorded.
+        Match length 0 starts a money session (max games required); max games is
+        optional otherwise. A supplied seed gives reproducible dice; a blank one
+        gives verifiable fair dice.
     </p>
     @if (LaunchError is not null)
     {

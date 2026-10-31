@@ -46,8 +46,8 @@ public sealed record DiagramContext(
     /// Context for the live game currently in view: the match-level facts come
     /// from the match summary (fetched once when the page opens), the entering
     /// scores and Crawford flag from the live snapshot / game-started event
-    /// that put this game in view — both frame-free facts the producer now
-    /// carries on the feed, so nothing is reconstructed client-side.
+    /// that put this game in view — both frame-free facts the feed carries, so
+    /// nothing is reconstructed client-side.
     /// </summary>
     public static DiagramContext ForLiveGame(
         MatchSummary summary, int seatOneScore, int seatTwoScore, bool isCrawford) =>

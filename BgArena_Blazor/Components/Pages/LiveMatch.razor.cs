@@ -12,9 +12,11 @@ namespace BgArena_Blazor.Components.Pages;
 /// push, not poll, so it is a bespoke component rather than a
 /// <see cref="PollingComponentBase"/>, but it mirrors that base's self-heal
 /// semantics: a transport drop keeps the last board, raises the unreachable
-/// banner, and re-subscribes (a fresh snapshot re-establishes state — the v1
-/// feed has no <c>Last-Event-ID</c> resume); a contract break (a malformed
-/// event) escalates into the circuit rather than being swallowed.
+/// banner, and re-subscribes (a fresh snapshot re-establishes state — the feed
+/// honors no <c>Last-Event-ID</c>). A contract break (a malformed event) stays
+/// out of the banner, but unlike the base nothing dispatches it: it faults the
+/// watch loop, and only a later await of the loop, at disposal or an id
+/// change, rethrows it.
 ///
 /// <para>The match summary is fetched once for the frame-free match context
 /// (engine names, length) the board needs; the feed then supplies the game in
@@ -98,9 +100,9 @@ public partial class LiveMatch : IAsyncDisposable
 
     /// <summary>
     /// The watch loop: establish the match context, follow the feed to its
-    /// terminal event, and re-subscribe across transport drops. Mirrors the
-    /// poll loop's failure taxonomy — transport failures self-heal, a contract
-    /// break propagates into the circuit.
+    /// terminal event, and re-subscribe across transport drops. Transport
+    /// failures self-heal as in the poll loop; a contract break ends the loop
+    /// with the exception on its task.
     /// </summary>
     private async Task WatchAsync(string matchId, CancellationToken cancellationToken)
     {
@@ -154,7 +156,8 @@ public partial class LiveMatch : IAsyncDisposable
                 await ApplyAsync(() => IsUnreachable = true);
             }
             // A JsonException (a producer contract break) is deliberately not
-            // caught here — it propagates out of the loop into the circuit.
+            // caught here, so it never reads as a transport failure. It faults
+            // this loop; nothing observes that until the loop is next awaited.
 
             try
             {

@@ -29,8 +29,9 @@ public sealed class ArenaClient
     /// <see cref="ErrorResponse"/> reason that never echoes the key) when a
     /// configured server is sent no key, or any server is sent an unrecognized
     /// one. It is documented for the whole surface rather than per endpoint, so
-    /// it folds into <see cref="ArenaResult{T}"/> everywhere — an auth
-    /// misconfiguration surfaces as a clean refusal, not a raw transport throw.
+    /// it folds into <see cref="ArenaResult{T}"/> on every call that carries an
+    /// envelope — there an auth misconfiguration surfaces as a clean refusal,
+    /// not a raw transport throw.
     /// </summary>
     private const HttpStatusCode AuthRefusal = HttpStatusCode.Unauthorized;
 
@@ -189,8 +190,8 @@ public sealed class ArenaClient
     /// inside <see cref="ArenaResult{T}.Value"/>.
     /// <para>The house error split holds over the stream: a transport drop
     /// mid-feed surfaces to the caller as it enumerates (the page re-subscribes;
-    /// the fresh snapshot re-establishes state — the v1 contract has no
-    /// <c>Last-Event-ID</c> resume), while a malformed event payload throws
+    /// the fresh snapshot re-establishes state — the feed honors no
+    /// <c>Last-Event-ID</c>), while a malformed event payload throws
     /// <see cref="JsonException"/> (a producer contract break, fail loud).
     /// Enumerating the returned stream owns the underlying response's lifetime;
     /// disposing the enumerator (or cancelling) closes the connection.</para>

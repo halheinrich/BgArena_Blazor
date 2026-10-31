@@ -101,10 +101,10 @@ public partial class Tournaments
         /// <summary>Match length in points for every scheduled match (≥ 1).</summary>
         public int MatchLength { get; set; } = 5;
 
-        /// <summary>How many times each pair meets; an even count balances the opening-roll seat.</summary>
+        /// <summary>How many times each pair meets; an even count balances the seats exactly.</summary>
         public int MatchesPerPairing { get; set; } = 2;
 
-        /// <summary>Optional tournament seed; server-chosen and recorded when omitted.</summary>
+        /// <summary>Optional tournament seed: a supplied seed gives reproducible dice, a blank one verifiable fair dice.</summary>
         public int? Seed { get; set; }
     }
 }

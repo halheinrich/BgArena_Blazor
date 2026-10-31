@@ -6,11 +6,11 @@ namespace BgArena_Blazor.Components.Shared;
 
 /// <summary>
 /// The sized container over the view-only <see cref="BackgammonDiagram"/>.
-/// The diagram has no intrinsic size (its SVG is <c>viewBox</c> +
-/// <c>width="100%"</c> — a documented pitfall), so this wrapper's
-/// max-width-constrained <c>replay-board</c> div is what gives it layout
-/// size; every replay render goes through here rather than re-solving sizing
-/// at each call site.
+/// The diagram takes its size from its host: it fills the width it is given
+/// and keeps the board's ratio (BgDiag_Razor, "Sizing: the ratio, contain-fit
+/// and the board slot"). This wrapper's max-width-constrained
+/// <c>replay-board</c> div is that host; every replay and live render goes
+/// through here rather than re-solving sizing at each call site.
 /// </summary>
 public partial class ReplayBoard
 {

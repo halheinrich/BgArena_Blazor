@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Components;
 namespace BgArena_Blazor.Components.Shared;
 
 /// <summary>
-/// Steps through a completed match game by game, entry by entry: a game
+/// Steps through a terminal match game by game, entry by entry: a game
 /// picker, a position stepper whose last step is the game's
 /// <c>finalState</c>, an actor-and-action caption per step, and the board.
 /// The viewer only walks served positions — moves are printed verbatim in
@@ -19,7 +19,7 @@ public partial class ReplayViewer
     private string? _forMatchId;
     private int _gameIndex;
 
-    /// <summary>The completed match's replay payload.</summary>
+    /// <summary>The terminal match's replay payload.</summary>
     [Parameter]
     [EditorRequired]
     public MatchGamesResponse Replay { get; set; } = default!;

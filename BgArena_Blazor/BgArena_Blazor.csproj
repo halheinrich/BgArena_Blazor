@@ -14,8 +14,8 @@
     <ProjectReference Include="..\..\BgTournament\BgTournament.Api\BgTournament.Api.csproj" />
     <!-- BgDiag_Razor supplies the view-only BackgammonDiagram component; the
          explicit BackgammonDiagram_Lib / BgDataTypes_Lib references document
-         the directly consumed surfaces (DiagramRequest/DiagramOptions,
-         CubeOwner) per house pattern. -->
+         the directly consumed surfaces (DiagramRequest/DisplayFacts,
+         BoardPosition/CubeOwner) per house pattern. -->
     <ProjectReference Include="..\..\BgDiag_Razor\BgDiag_Razor\BgDiag_Razor.csproj" />
     <ProjectReference Include="..\..\BackgammonDiagram_Lib\BackgammonDiagram_Lib\BackgammonDiagram_Lib.csproj" />
     <ProjectReference Include="..\..\BgDataTypes_Lib\BgDataTypes_Lib\BgDataTypes_Lib.csproj" />

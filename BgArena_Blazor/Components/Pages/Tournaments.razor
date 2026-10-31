@@ -61,8 +61,8 @@
         <button id="create-button" class="primary" @onclick="CreateAsync" disabled="@(Participants.Count < 2)">Create</button>
     </div>
     <p class="muted">
-        An even matches-per-pairing balances the opening-roll seat exactly. An
-        omitted seed is server-chosen and recorded, so any tournament can be re-run.
+        An even matches-per-pairing balances the seats exactly. A supplied seed
+        gives reproducible dice; a blank one gives verifiable fair dice.
     </p>
     @if (CreateError is not null)
     {

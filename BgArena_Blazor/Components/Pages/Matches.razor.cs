@@ -73,7 +73,7 @@ public partial class Matches
         /// <summary>Match length in points; 0 starts a money session.</summary>
         public int MatchLength { get; set; } = 7;
 
-        /// <summary>Optional dice seed; server-chosen and recorded when omitted.</summary>
+        /// <summary>Optional dice seed: a supplied seed gives reproducible dice, a blank one verifiable fair dice.</summary>
         public int? Seed { get; set; }
 
         /// <summary>Optional games cap; required by the server for a money session.</summary>

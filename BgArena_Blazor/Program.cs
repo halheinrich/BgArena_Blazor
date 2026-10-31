@@ -19,10 +19,10 @@ builder.Services.AddHttpClient<ArenaClient>(client =>
             ?? throw new InvalidOperationException("Missing required configuration 'Arena:BaseAddress'."));
 
     // BgTournament's admin surface takes named API keys: the server stamps the
-    // key's actor name on the durable record of the actions it authorizes. When
-    // one is configured we present it on every request in the header the Api
-    // assembly owns (AdminApiKey.HeaderName is the SSOT — never a copied string).
-    // Absent leaves today's anonymous behavior with byte-identical requests; a
+    // key's actor name on the durable record of each match and tournament it
+    // creates. When one is configured we present it on every request in the
+    // header the Api assembly owns (AdminApiKey.HeaderName is the SSOT — never a
+    // copied string). Absent leaves requests anonymous and byte-identical; a
     // server enforcing keys then answers a named 401. The key is a secret — it
     // lives only on the client's default headers, is never logged, and never
     // reaches an error the UI renders.

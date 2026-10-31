@@ -20,7 +20,7 @@ public abstract class PollingComponentBase : ComponentBase, IAsyncDisposable
     private PeriodicTimer? _timer;
     private Task? _pollLoop;
 
-    /// <summary>Poll cadence. 2 s everywhere by default — the v1 dashboard call.</summary>
+    /// <summary>Poll cadence: 2 s unless a page overrides it.</summary>
     protected virtual TimeSpan PollInterval => TimeSpan.FromSeconds(2);
 
     /// <summary>
