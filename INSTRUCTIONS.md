@@ -345,13 +345,16 @@ surfaced.
   second path. A fold is only as loud as its caller: the forms and the replay
   and audit pages render the reason, the match detail, tournament detail and
   live pages treat any refusal as not-found, and the `.mat` relay answers a 500.
-- **The frame rule is fixed — never flip anything.** Every replay position is
-  seat-One frame by producer contract. A seat-Two play therefore shows its
-  dice on seat One's board half: cosmetic, and the caption carries the actor.
-  Do not "fix" this by flipping app-side. The producer's
-  `GameState.OpponentView` is the system's single re-expression (BgTournament,
-  "The frame rule"), and a second one is exactly the bug its no-double-flip
-  pins exist to prevent.
+- **The frame is the producer's — never flip anything.** Every replay
+  position is seat-One frame by producer contract. A seat-Two play therefore
+  shows its dice on seat One's board half: cosmetic, and the caption carries
+  the actor. Do not "fix" this by flipping app-side. That seat-One frame is
+  itself a stopgap: Hal ruled that positions stay in the on-roll player's
+  frame with no re-expression, and that the renderer places the on-roll
+  player instead (halheinrich/backgammon#533). Until
+  halheinrich/backgammon#538 brings that, the producer's `ReplayProjection`
+  holds the one re-expression left (BgTournament, "The frame rule"); a second
+  one here would double-flip.
 - **Moves are printed, never interpreted.** `PlayMove` coordinates are in the
   actor's own numbering. The only permitted translation is presentational:
   the contract's two pinned sentinels (from 25 = bar, to 0 = off). Anything

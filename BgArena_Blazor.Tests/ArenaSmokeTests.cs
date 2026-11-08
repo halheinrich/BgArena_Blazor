@@ -449,7 +449,7 @@ public class ArenaSmokeTests : BunitContext
 
         /// <inheritdoc />
         public async ValueTask<BgDataTypes_Lib.Play> ChoosePlayAsync(
-            BgGame_Lib.GameState state, int die1, int die2, CancellationToken cancellationToken = default)
+            BgGame_Lib.GameSnapshot state, int die1, int die2, CancellationToken cancellationToken = default)
         {
             await _gate.Task.WaitAsync(cancellationToken);
             return await inner.ChoosePlayAsync(state, die1, die2, cancellationToken);
